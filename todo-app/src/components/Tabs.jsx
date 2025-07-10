@@ -1,7 +1,7 @@
 import React from "react";
 
 function Tabs(props) {
-    const { todos } = props;
+    const { todos, selectedTab, setSelectedTab } = props;
     const tabs = ["All", "Open", "Complete"];
 
     return (
@@ -15,13 +15,18 @@ function Tabs(props) {
                         : todos.filter((val) => val.complete).length;
 
                 return (
-                    <button key={tabIndex} className="tab-button">
+                    <button
+                        key={tabIndex}
+                        className={"tab-button " + (selectedTab === tab ? "tab-selected" : "")}
+                        onClick={() => setSelectedTab(tab)}
+                    >
                         <h4>
                             {tab} <span>({numOfTasks})</span>
                         </h4>
                     </button>
                 );
             })}
+            <hr />
         </nav>
     );
 }
