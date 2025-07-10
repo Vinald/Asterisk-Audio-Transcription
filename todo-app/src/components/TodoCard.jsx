@@ -1,7 +1,22 @@
-import React from "react";
+function TodoCard(props) {
+    const { todo } = props;
+    
 
-function TodoCard() {
-    return <div>TodoCard</div>;
+    return (
+        <>
+            <div className="card todo-item">
+                <p>{todo.input}</p>
+                <div className="todo-buttons">
+                    <button disabled={todo.complete}>
+                        <h6>Done</h6>
+                    </button>
+                    <button>
+                        <h6>Delete</h6>
+                    </button>
+                </div>
+            </div>
+        </>
+    );
 }
 
 export default TodoCard;
