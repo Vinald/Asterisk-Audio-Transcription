@@ -282,8 +282,6 @@
     <div class="field">
       <label>Speaker</label>
       <select id="speaker"></select>
-      <input type="number" id="speaker-override" min="1" placeholder="Override speaker ID (optional)" />
-      <span class="hint">Leave blank to use the selected speaker above</span>
     </div>
 
     <div class="field">
@@ -375,14 +373,13 @@
     const text = document.getElementById("text").value.trim();
     const filename = document.getElementById("filename").value.trim();
     const language = document.getElementById("language").value;
-    const overrideVal = document.getElementById("speaker-override").value.trim();
-    const speaker_id = overrideVal ? parseInt(overrideVal, 10) : parseInt(document.getElementById("speaker").value, 10);
+    const voice = document.getElementById("speaker").value;
 
     clearMessages();
 
     if (!text) return showError("Text cannot be empty.");
     if (!filename) return showError("Filename cannot be empty.");
-    if (isNaN(speaker_id) || speaker_id < 1) return showError("Speaker ID must be a positive number.");
+    if (!voice) return showError("No voice selected — wait for speakers to load.");
 
     setLoading(true);
 
@@ -391,7 +388,7 @@
       form.append("text", text);
       form.append("filename", filename);
       form.append("language", language);
-      form.append("speaker_id", speaker_id);
+      form.append("voice", voice);
 
       const resp = await fetch("/generate", { method: "POST", body: form });
       const data = await resp.json();
