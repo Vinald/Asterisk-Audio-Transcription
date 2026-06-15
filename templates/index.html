@@ -67,7 +67,7 @@
       letter-spacing: 0.05em;
     }
 
-    textarea, input[type="text"], select {
+    textarea, input[type="text"], input[type="number"], select {
       background: #1a1f2e;
       border: 1px solid #2d3748;
       border-radius: 8px;
@@ -77,9 +77,10 @@
       outline: none;
       transition: border-color 0.15s;
       font-family: inherit;
+      width: 100%;
     }
 
-    textarea:focus, input[type="text"]:focus, select:focus {
+    textarea:focus, input[type="text"]:focus, input[type="number"]:focus, select:focus {
       border-color: #3b82f6;
     }
 
@@ -95,6 +96,8 @@
       font-size: 0.75rem;
       color: #4a5568;
     }
+
+    input[type="number"]::placeholder { color: #4a5568; }
 
     .btn-generate {
       background: #2563eb;
@@ -261,7 +264,7 @@
 
 <header>
   <h1>Asterisk Audio Generator</h1>
-  <span>Sunbird TTS · 8 kHz PCM</span>
+  <span>Sunbird TTS · 8 kHz MP3</span>
 </header>
 
 <div class="layout">
@@ -271,11 +274,16 @@
 
     <div class="field">
       <label>Language</label>
-      <select id="language">
-        {% for lang in languages %}
-        <option value="{{ lang }}">{{ lang }}</option>
-        {% endfor %}
+      <select id="language" onchange="updateSpeakers()" disabled>
+        <option>Loading…</option>
       </select>
+    </div>
+
+    <div class="field">
+      <label>Speaker</label>
+      <select id="speaker"></select>
+      <input type="number" id="speaker-override" min="1" placeholder="Override speaker ID (optional)" />
+      <span class="hint">Leave blank to use the selected speaker above</span>
     </div>
 
     <div class="field">
@@ -286,7 +294,7 @@
     <div class="field">
       <label>Audio filename</label>
       <input type="text" id="filename" placeholder="e.g. hash-greeting" />
-      <span class="hint">No extension needed — .wav is added automatically</span>
+      <span class="hint">No extension needed — .mp3 is added automatically</span>
     </div>
 
     <div class="error-bar" id="error-bar"></div>
@@ -326,15 +334,55 @@
 </div>
 
 <script>
+  let SPEAKERS = {};
+
+  async function loadSpeakers() {
+    const langSel = document.getElementById("language");
+    const spkSel = document.getElementById("speaker");
+    try {
+      const resp = await fetch("/speakers");
+      SPEAKERS = await resp.json();
+      langSel.innerHTML = "";
+      Object.keys(SPEAKERS).forEach(lang => {
+        const opt = document.createElement("option");
+        opt.value = lang;
+        opt.textContent = lang;
+        langSel.appendChild(opt);
+      });
+      langSel.disabled = false;
+      updateSpeakers();
+    } catch {
+      langSel.innerHTML = "<option>Failed to load — check AUTH_TOKEN</option>";
+      spkSel.innerHTML = "";
+    }
+  }
+
+  function updateSpeakers() {
+    const lang = document.getElementById("language").value;
+    const sel = document.getElementById("speaker");
+    sel.innerHTML = "";
+    (SPEAKERS[lang] || []).forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = s.name;
+      sel.appendChild(opt);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", loadSpeakers);
+
   async function generate() {
     const text = document.getElementById("text").value.trim();
     const filename = document.getElementById("filename").value.trim();
     const language = document.getElementById("language").value;
+    const overrideVal = document.getElementById("speaker-override").value.trim();
+    const speaker_id = overrideVal ? parseInt(overrideVal, 10) : parseInt(document.getElementById("speaker").value, 10);
 
     clearMessages();
 
     if (!text) return showError("Text cannot be empty.");
     if (!filename) return showError("Filename cannot be empty.");
+    if (isNaN(speaker_id) || speaker_id < 1) return showError("Speaker ID must be a positive number.");
 
     setLoading(true);
 
@@ -343,6 +391,7 @@
       form.append("text", text);
       form.append("filename", filename);
       form.append("language", language);
+      form.append("speaker_id", speaker_id);
 
       const resp = await fetch("/generate", { method: "POST", body: form });
       const data = await resp.json();
@@ -389,17 +438,38 @@
     }
 
     const list = document.getElementById("file-list");
+
     const item = document.createElement("div");
     item.className = "file-item new-file";
     item.id = `file-${filename}`;
-    item.innerHTML = `
-      <div class="file-icon">🔊</div>
-      <span class="file-name">${filename}</span>
-      <div class="file-actions">
-        <a class="btn-download" href="/media/${filename}" download="${filename}">↓ Download</a>
-        <button class="btn-delete" onclick="deleteFile('${filename}')">✕ Delete</button>
-      </div>
-    `;
+
+    const icon = document.createElement("div");
+    icon.className = "file-icon";
+    icon.textContent = "🔊";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "file-name";
+    nameSpan.textContent = filename;
+
+    const actions = document.createElement("div");
+    actions.className = "file-actions";
+
+    const dlLink = document.createElement("a");
+    dlLink.className = "btn-download";
+    dlLink.href = `/media/${encodeURIComponent(filename)}`;
+    dlLink.download = filename;
+    dlLink.textContent = "↓ Download";
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn-delete";
+    delBtn.textContent = "✕ Delete";
+    delBtn.addEventListener("click", () => deleteFile(filename));
+
+    actions.appendChild(dlLink);
+    actions.appendChild(delBtn);
+    item.appendChild(icon);
+    item.appendChild(nameSpan);
+    item.appendChild(actions);
     list.prepend(item);
     setTimeout(() => item.classList.remove("new-file"), 2000);
   }

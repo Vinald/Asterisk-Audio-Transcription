@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 VENV_DIR = os.path.join(PROJECT_DIR, ".venv")
@@ -51,15 +52,42 @@ if sys.version_info < (3, 10):
 ok(f"Python {sys.version.split()[0]}")
 
 
-# ── 2. sox ─────────────────────────────────────────────────────────────────────
+# ── 2. sox + MP3 support ───────────────────────────────────────────────────────
 step("2. System dependencies")
 if shutil.which("sox") is None:
     die(
         "sox not found.\n"
-        "  Linux:  sudo apt install sox\n"
+        "  Linux:  sudo apt install sox libsox-fmt-mp3\n"
         "  Mac:    brew install sox"
     )
 ok("sox found")
+
+# Verify sox can actually encode MP3 (requires libsox-fmt-mp3 on Linux)
+print("[*] Checking sox MP3 encoding support...")
+_fd_wav, _tmp_wav = tempfile.mkstemp(suffix=".wav")
+os.close(_fd_wav)
+_fd_mp3, _tmp_mp3 = tempfile.mkstemp(suffix=".mp3")
+os.close(_fd_mp3)
+try:
+    subprocess.run(
+        ["sox", "-n", "-r", "8000", "-c", "1", "-b", "16", _tmp_wav, "trim", "0", "0.05"],
+        check=True, capture_output=True,
+    )
+    _res = subprocess.run(
+        ["sox", _tmp_wav, "-r", "8000", "-c", "1", _tmp_mp3],
+        capture_output=True,
+    )
+    if _res.returncode != 0 or not os.path.exists(_tmp_mp3) or os.path.getsize(_tmp_mp3) == 0:
+        die(
+            "sox cannot encode MP3. Install MP3 support:\n"
+            "  Linux:  sudo apt install libsox-fmt-mp3\n"
+            "  Mac:    brew install sox  (includes MP3 via lame)"
+        )
+    ok("sox MP3 encoding verified")
+finally:
+    for _p in [_tmp_wav, _tmp_mp3]:
+        if os.path.exists(_p):
+            os.unlink(_p)
 
 
 # ── 3. .env ────────────────────────────────────────────────────────────────────
