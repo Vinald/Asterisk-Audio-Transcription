@@ -118,7 +118,7 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "files": files})
 
 
-async def _do_generate(request: Request, text: str, filename_raw: str, language: str, voice: str) -> dict:
+async def _do_generate(request: Request, text: str, filename_raw: str, language: str, voice: str, speed: float = 1.0) -> dict:
     """Synthesise text → 8 kHz mono MP3. Returns {filename, url}."""
     safe_name = filename_raw.strip().replace(" ", "-")
     safe_name = "".join(c for c in safe_name if c.isalnum() or c in "-_")
@@ -142,7 +142,7 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
             fd, tmp_path = tempfile.mkstemp(suffix=".wav")
             os.close(fd)
             samples, sample_rate = await asyncio.to_thread(
-                kokoro.create, text, voice=voice, speed=1.0, lang="en-us"
+                kokoro.create, text, voice=voice, speed=speed, lang="en-us"
             )
             with wave.open(tmp_path, "wb") as wf:
                 wf.setnchannels(1)
@@ -191,7 +191,9 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
             # ── edge-tts (Swahili) ────────────────────────────────────────────
             fd, tmp_path = tempfile.mkstemp(suffix=".mp3")
             os.close(fd)
-            communicate = edge_tts.Communicate(text, voice)
+            # Convert speed multiplier to edge-tts rate string: 0.75 → "-25%", 1.25 → "+25%"
+            rate = f"{int((speed - 1.0) * 100):+d}%"
+            communicate = edge_tts.Communicate(text, voice, rate=rate)
             await communicate.save(tmp_path)
 
         proc = await asyncio.create_subprocess_exec(
@@ -221,12 +223,14 @@ async def generate(
     filename: str = Form(...),
     language: str = Form(...),
     voice: str = Form(...),
+    speed: float = Form(1.0),
 ):
     if language not in VOICES:
         raise HTTPException(status_code=400, detail=f"Unknown language: {language}")
     if voice not in _VALID_VOICES:
         raise HTTPException(status_code=400, detail=f"Unknown voice: {voice}")
-    return JSONResponse(await _do_generate(request, text, filename, language, voice))
+    speed = max(0.5, min(2.0, speed))
+    return JSONResponse(await _do_generate(request, text, filename, language, voice, speed))
 
 
 @app.post("/batch")
@@ -235,11 +239,13 @@ async def batch_generate(
     file: UploadFile = File(...),
     language: str = Form(...),
     voice: str = Form(...),
+    speed: float = Form(1.0),
 ):
     if language not in VOICES:
         raise HTTPException(status_code=400, detail=f"Unknown language: {language}")
     if voice not in _VALID_VOICES:
         raise HTTPException(status_code=400, detail=f"Unknown voice: {voice}")
+    speed = max(0.5, min(2.0, speed))
 
     content = await file.read()
     for enc in ("utf-8-sig", "utf-8", "latin-1"):
@@ -277,7 +283,7 @@ async def batch_generate(
         for i, (txt, fname) in enumerate(rows):
             yield f"data: {json.dumps({'type': 'start', 'index': i, 'filename': fname})}\n\n"
             try:
-                result = await _do_generate(request, txt, fname, language, voice)
+                result = await _do_generate(request, txt, fname, language, voice, speed)
                 yield f"data: {json.dumps({'type': 'done', 'index': i, 'filename': result['filename'], 'url': result['url']})}\n\n"
             except HTTPException as exc:
                 yield f"data: {json.dumps({'type': 'error', 'index': i, 'filename': fname, 'detail': exc.detail})}\n\n"
