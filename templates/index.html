@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Asterisk Audio Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 20px 32px;
+      border-bottom: 1px solid #1e2535;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header h1 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+
+    header span {
+      font-size: 0.75rem;
+      background: #1e3a5f;
+      color: #60a5fa;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 0;
+      flex: 1;
+      height: calc(100vh - 62px);
+    }
+
+    /* ── Left panel: form ── */
+    .panel-form {
+      border-right: 1px solid #1e2535;
+      padding: 28px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+
+    label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    textarea, input[type="text"], select {
+      background: #1a1f2e;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 0.95rem;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+
+    textarea:focus, input[type="text"]:focus, select:focus {
+      border-color: #3b82f6;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 140px;
+      line-height: 1.6;
+    }
+
+    select option { background: #1a1f2e; }
+
+    .hint {
+      font-size: 0.75rem;
+      color: #4a5568;
+    }
+
+    .btn-generate {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.15s, opacity 0.15s;
+      margin-top: 4px;
+    }
+
+    .btn-generate:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-bar {
+      background: #3b1212;
+      border: 1px solid #7f1d1d;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #fca5a5;
+      display: none;
+    }
+
+    .success-bar {
+      background: #0f2e1a;
+      border: 1px solid #14532d;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: #86efac;
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .success-bar a {
+      color: #4ade80;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .success-bar a:hover { text-decoration: underline; }
+
+    /* ── Right panel: file list ── */
+    .panel-files {
+      padding: 28px;
+      overflow-y: auto;
+    }
+
+    .panel-files h2 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+
+    .file-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .file-item {
+      background: #141824;
+      border: 1px solid #1e2535;
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: border-color 0.15s;
+    }
+
+    .file-item:hover { border-color: #2d3748; }
+
+    .file-item.new-file {
+      border-color: #166534;
+      background: #0f2316;
+      animation: fadeIn 0.4s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+    .file-icon {
+      width: 36px; height: 36px;
+      background: #1e2d4a;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 1rem;
+    }
+
+    .file-name {
+      flex: 1;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #cbd5e1;
+      word-break: break-all;
+    }
+
+    .file-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    .btn-download, .btn-delete {
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s;
+    }
+
+    .btn-download {
+      background: #1e3a5f;
+      color: #60a5fa;
+    }
+    .btn-download:hover { background: #1e40af; color: #93c5fd; }
+
+    .btn-delete {
+      background: #2d1515;
+      color: #f87171;
+    }
+    .btn-delete:hover { background: #7f1d1d; color: #fca5a5; }
+
+    .empty-state {
+      color: #4a5568;
+      font-size: 0.9rem;
+      margin-top: 12px;
+    }
+
+    @media (max-width: 768px) {
+      .layout { grid-template-columns: 1fr; height: auto; }
+      .panel-form { border-right: none; border-bottom: 1px solid #1e2535; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Asterisk Audio Generator</h1>
+  <span>Sunbird TTS · 8 kHz PCM</span>
+</header>
+
+<div class="layout">
+
+  <!-- ── Form ── -->
+  <div class="panel-form">
+
+    <div class="field">
+      <label>Language</label>
+      <select id="language">
+        {% for lang in languages %}
+        <option value="{{ lang }}">{{ lang }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Text</label>
+      <textarea id="text" placeholder="Type the words to convert to audio…"></textarea>
+    </div>
+
+    <div class="field">
+      <label>Audio filename</label>
+      <input type="text" id="filename" placeholder="e.g. hash-greeting" />
+      <span class="hint">No extension needed — .wav is added automatically</span>
+    </div>
+
+    <div class="error-bar" id="error-bar"></div>
+    <div class="success-bar" id="success-bar">
+      <span>✓ Generated —</span>
+      <a id="success-link" href="#" download>Download file</a>
+    </div>
+
+    <button class="btn-generate" id="btn-generate" onclick="generate()">
+      <div class="spinner" id="spinner"></div>
+      <span id="btn-label">Generate Audio</span>
+    </button>
+
+  </div>
+
+  <!-- ── File list ── -->
+  <div class="panel-files">
+    <h2>Saved files on server</h2>
+    <div class="file-list" id="file-list">
+      {% if files %}
+        {% for f in files %}
+        <div class="file-item" id="file-{{ f }}">
+          <div class="file-icon">🔊</div>
+          <span class="file-name">{{ f }}</span>
+          <div class="file-actions">
+            <a class="btn-download" href="/media/{{ f }}" download="{{ f }}">↓ Download</a>
+            <button class="btn-delete" onclick="deleteFile('{{ f }}')">✕ Delete</button>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty-state" id="empty-state">No audio files yet — generate one to get started.</p>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<script>
+  async function generate() {
+    const text = document.getElementById("text").value.trim();
+    const filename = document.getElementById("filename").value.trim();
+    const language = document.getElementById("language").value;
+
+    clearMessages();
+
+    if (!text) return showError("Text cannot be empty.");
+    if (!filename) return showError("Filename cannot be empty.");
+
+    setLoading(true);
+
+    try {
+      const form = new FormData();
+      form.append("text", text);
+      form.append("filename", filename);
+      form.append("language", language);
+
+      const resp = await fetch("/generate", { method: "POST", body: form });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        showError(data.detail || "Generation failed.");
+        return;
+      }
+
+      showSuccess(data.url, data.filename);
+      addFileToList(data.filename);
+
+    } catch (err) {
+      showError("Network error — is the server running?");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteFile(filename) {
+    if (!confirm(`Delete ${filename} from the server?`)) return;
+
+    const resp = await fetch(`/files/${encodeURIComponent(filename)}`, { method: "DELETE" });
+    if (resp.ok) {
+      const el = document.getElementById(`file-${filename}`);
+      if (el) el.remove();
+      if (!document.querySelector(".file-item")) {
+        ensureEmptyState();
+      }
+    } else {
+      const data = await resp.json().catch(() => ({}));
+      alert(data.detail || "Delete failed.");
+    }
+  }
+
+  function addFileToList(filename) {
+    removeEmptyState();
+    // Move to top if already exists
+    const existing = document.getElementById(`file-${filename}`);
+    if (existing) {
+      existing.classList.add("new-file");
+      setTimeout(() => existing.classList.remove("new-file"), 2000);
+      return;
+    }
+
+    const list = document.getElementById("file-list");
+    const item = document.createElement("div");
+    item.className = "file-item new-file";
+    item.id = `file-${filename}`;
+    item.innerHTML = `
+      <div class="file-icon">🔊</div>
+      <span class="file-name">${filename}</span>
+      <div class="file-actions">
+        <a class="btn-download" href="/media/${filename}" download="${filename}">↓ Download</a>
+        <button class="btn-delete" onclick="deleteFile('${filename}')">✕ Delete</button>
+      </div>
+    `;
+    list.prepend(item);
+    setTimeout(() => item.classList.remove("new-file"), 2000);
+  }
+
+  function setLoading(on) {
+    const btn = document.getElementById("btn-generate");
+    const spinner = document.getElementById("spinner");
+    const label = document.getElementById("btn-label");
+    btn.disabled = on;
+    spinner.style.display = on ? "block" : "none";
+    label.textContent = on ? "Generating…" : "Generate Audio";
+  }
+
+  function showError(msg) {
+    const el = document.getElementById("error-bar");
+    el.textContent = msg;
+    el.style.display = "block";
+    document.getElementById("success-bar").style.display = "none";
+  }
+
+  function showSuccess(url, filename) {
+    const bar = document.getElementById("success-bar");
+    const link = document.getElementById("success-link");
+    link.href = url;
+    link.download = filename;
+    link.textContent = `Download ${filename}`;
+    bar.style.display = "flex";
+    document.getElementById("error-bar").style.display = "none";
+  }
+
+  function clearMessages() {
+    document.getElementById("error-bar").style.display = "none";
+    document.getElementById("success-bar").style.display = "none";
+  }
+
+  function removeEmptyState() {
+    const el = document.getElementById("empty-state");
+    if (el) el.remove();
+  }
+
+  function ensureEmptyState() {
+    const list = document.getElementById("file-list");
+    if (!document.getElementById("empty-state")) {
+      const p = document.createElement("p");
+      p.className = "empty-state";
+      p.id = "empty-state";
+      p.textContent = "No audio files yet — generate one to get started.";
+      list.appendChild(p);
+    }
+  }
+
+  // Allow Ctrl+Enter to submit
+  document.getElementById("text").addEventListener("keydown", e => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) generate();
+  });
+</script>
+
+</body>
+</html>
