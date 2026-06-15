@@ -1,4 +1,7 @@
 import asyncio
+import csv
+import io
+import json
 import logging
 import os
 import tempfile
@@ -10,8 +13,8 @@ import edge_tts
 import httpx
 import numpy as np
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from kokoro_onnx import Kokoro
@@ -32,7 +35,7 @@ FILENAME_MAX_LEN = 100
 # Voice roster — voice ID prefix determines TTS backend:
 #   af_/am_/bf_/bm_ → Kokoro TTS (English, local model)
 #   sw-*            → edge-tts (Swahili, Microsoft neural)
-#   sunbird:*       → Sunbird AI (Luganda, needs AUTH_TOKEN)
+#   sunbird:*       → Sunbird AI (needs AUTH_TOKEN)
 VOICES = {
     "English": [
         # ── Kokoro TTS (local model, highest quality) ──
@@ -52,7 +55,6 @@ VOICES = {
         {"id": "sunbird:248", "name": "Sunbird 248 — English female (Sunbird)"},
     ],
     "Luganda": [
-        # Sunbird AI is the only free TTS that supports Luganda
         {"id": "sunbird:248", "name": "Sunbird — Luganda (female)"},
     ],
     "Swahili": [
@@ -71,10 +73,9 @@ os.makedirs(MEDIA_DIR, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app):
-    # Load Kokoro model (English TTS)
     if not os.path.exists(KOKORO_MODEL_PATH) or not os.path.exists(KOKORO_VOICES_PATH):
-        log.error("Kokoro model files missing in models/ — English TTS will not work")
-        log.error("Download from: https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0")
+        log.error("Kokoro model files missing in models/ — English (Kokoro) TTS will not work")
+        log.error("Run: python install.py  (step 5 downloads the models)")
         app.state.kokoro = None
     else:
         log.info("Loading Kokoro TTS model (int8, CPU)...")
@@ -117,21 +118,9 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "files": files})
 
 
-@app.post("/generate")
-async def generate(
-    request: Request,
-    text: str = Form(...),
-    filename: str = Form(...),
-    language: str = Form(...),
-    voice: str = Form(...),
-):
-    if language not in VOICES:
-        raise HTTPException(status_code=400, detail=f"Unknown language: {language}")
-    if voice not in _VALID_VOICES:
-        raise HTTPException(status_code=400, detail=f"Unknown voice: {voice}")
-
-    # Sanitise filename: strip .mp3 if present, clean chars, cap, re-add .mp3
-    safe_name = filename.strip().replace(" ", "-")
+async def _do_generate(request: Request, text: str, filename_raw: str, language: str, voice: str) -> dict:
+    """Synthesise text → 8 kHz mono MP3. Returns {filename, url}."""
+    safe_name = filename_raw.strip().replace(" ", "-")
     safe_name = "".join(c for c in safe_name if c.isalnum() or c in "-_")
     if safe_name.endswith("mp3"):
         safe_name = safe_name[:-3].rstrip(".")
@@ -146,20 +135,15 @@ async def generate(
 
     try:
         if voice in _KOKORO_VOICES:
-            # ── Kokoro TTS (English, local) ─────────────────────────────────
+            # ── Kokoro TTS (English, local) ──────────────────────────────────
             kokoro: Kokoro | None = getattr(request.app.state, "kokoro", None)
             if kokoro is None:
                 raise HTTPException(status_code=503, detail="Kokoro model not loaded — see server logs")
-
             fd, tmp_path = tempfile.mkstemp(suffix=".wav")
             os.close(fd)
-
-            # create() is synchronous — offload to thread pool
             samples, sample_rate = await asyncio.to_thread(
                 kokoro.create, text, voice=voice, speed=1.0, lang="en-us"
             )
-
-            # Write numpy float32 → 16-bit PCM WAV using stdlib wave
             with wave.open(tmp_path, "wb") as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
@@ -192,7 +176,6 @@ async def generate(
                 raise HTTPException(status_code=502, detail=f"Sunbird missing audio_url (keys: {list(payload.keys())})")
             dl = await client.get(audio_url, timeout=30)
             dl.raise_for_status()
-            # Sunbird returns WAV; detect from URL or Content-Type to set sox correctly
             ct = dl.headers.get("content-type", "")
             if "wav" in ct or audio_url.split("?")[0].lower().endswith(".wav"):
                 sox_fmt = "wav"
@@ -205,13 +188,12 @@ async def generate(
                 f.write(dl.content)
 
         else:
-            # ── edge-tts (Swahili and any other neural voice) ────────────────
+            # ── edge-tts (Swahili) ────────────────────────────────────────────
             fd, tmp_path = tempfile.mkstemp(suffix=".mp3")
             os.close(fd)
             communicate = edge_tts.Communicate(text, voice)
             await communicate.save(tmp_path)
 
-        # Convert to 8 kHz mono MP3 for Asterisk (non-blocking)
         proc = await asyncio.create_subprocess_exec(
             "sox", "-t", sox_fmt, tmp_path, "-r", "8000", "-c", "1", out_path,
             stdout=asyncio.subprocess.PIPE,
@@ -229,7 +211,85 @@ async def generate(
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
-    return JSONResponse({"filename": safe_name, "url": f"/media/{safe_name}"})
+    return {"filename": safe_name, "url": f"/media/{safe_name}"}
+
+
+@app.post("/generate")
+async def generate(
+    request: Request,
+    text: str = Form(...),
+    filename: str = Form(...),
+    language: str = Form(...),
+    voice: str = Form(...),
+):
+    if language not in VOICES:
+        raise HTTPException(status_code=400, detail=f"Unknown language: {language}")
+    if voice not in _VALID_VOICES:
+        raise HTTPException(status_code=400, detail=f"Unknown voice: {voice}")
+    return JSONResponse(await _do_generate(request, text, filename, language, voice))
+
+
+@app.post("/batch")
+async def batch_generate(
+    request: Request,
+    file: UploadFile = File(...),
+    language: str = Form(...),
+    voice: str = Form(...),
+):
+    if language not in VOICES:
+        raise HTTPException(status_code=400, detail=f"Unknown language: {language}")
+    if voice not in _VALID_VOICES:
+        raise HTTPException(status_code=400, detail=f"Unknown voice: {voice}")
+
+    content = await file.read()
+    for enc in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            text_content = content.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise HTTPException(status_code=400, detail="Could not decode CSV — save the file as UTF-8 and try again")
+
+    rows: list[tuple[str, str]] = []
+    reader = csv.reader(io.StringIO(text_content))
+    for i, row in enumerate(reader):
+        if not row or all(not cell.strip() for cell in row):
+            continue
+        if len(row) < 2:
+            continue
+        text_val = row[0].strip()
+        filename_val = row[1].strip()
+        # Skip header row if present
+        if i == 0 and text_val.lower() in ("text", "script") and filename_val.lower() in ("filename", "file", "name"):
+            continue
+        if text_val and filename_val:
+            rows.append((text_val, filename_val))
+
+    if not rows:
+        raise HTTPException(
+            status_code=400,
+            detail="CSV has no valid rows. Expected two columns: text, filename (header row optional)",
+        )
+
+    async def stream():
+        yield f"data: {json.dumps({'type': 'total', 'total': len(rows)})}\n\n"
+        for i, (txt, fname) in enumerate(rows):
+            yield f"data: {json.dumps({'type': 'start', 'index': i, 'filename': fname})}\n\n"
+            try:
+                result = await _do_generate(request, txt, fname, language, voice)
+                yield f"data: {json.dumps({'type': 'done', 'index': i, 'filename': result['filename'], 'url': result['url']})}\n\n"
+            except HTTPException as exc:
+                yield f"data: {json.dumps({'type': 'error', 'index': i, 'filename': fname, 'detail': exc.detail})}\n\n"
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'error', 'index': i, 'filename': fname, 'detail': str(exc)})}\n\n"
+        yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/files")

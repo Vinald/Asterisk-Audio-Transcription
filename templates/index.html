@@ -24,11 +24,7 @@
       gap: 12px;
     }
 
-    header h1 {
-      font-size: 1.2rem;
-      font-weight: 600;
-      color: #f1f5f9;
-    }
+    header h1 { font-size: 1.2rem; font-weight: 600; color: #f1f5f9; }
 
     header span {
       font-size: 0.75rem;
@@ -47,15 +43,49 @@
       height: calc(100vh - 62px);
     }
 
-    /* ── Left panel: form ── */
+    /* ── Left panel ── */
     .panel-form {
       border-right: 1px solid #1e2535;
-      padding: 28px 28px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
-      overflow-y: auto;
+      overflow: hidden;
     }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid #1e2535;
+      flex-shrink: 0;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 12px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #64748b;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      letter-spacing: 0.03em;
+    }
+
+    .tab-btn:hover { color: #94a3b8; }
+    .tab-btn.active { color: #60a5fa; border-bottom-color: #3b82f6; }
+
+    .tab-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .tab-pane { display: none; flex-direction: column; gap: 18px; }
+    .tab-pane.active { display: flex; }
 
     .field { display: flex; flex-direction: column; gap: 6px; }
 
@@ -67,7 +97,7 @@
       letter-spacing: 0.05em;
     }
 
-    textarea, input[type="text"], input[type="number"], select {
+    textarea, input[type="text"], select {
       background: #1a1f2e;
       border: 1px solid #2d3748;
       border-radius: 8px;
@@ -80,25 +110,51 @@
       width: 100%;
     }
 
-    textarea:focus, input[type="text"]:focus, input[type="number"]:focus, select:focus {
-      border-color: #3b82f6;
-    }
+    textarea:focus, input[type="text"]:focus, select:focus { border-color: #3b82f6; }
 
-    textarea {
-      resize: vertical;
-      min-height: 140px;
-      line-height: 1.6;
-    }
+    textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
 
     select option { background: #1a1f2e; }
 
-    .hint {
-      font-size: 0.75rem;
-      color: #4a5568;
+    .hint { font-size: 0.75rem; color: #4a5568; }
+
+    /* CSV file input */
+    .file-drop {
+      background: #1a1f2e;
+      border: 1px dashed #2d3748;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      position: relative;
     }
 
-    input[type="number"]::placeholder { color: #4a5568; }
+    .file-drop:hover, .file-drop.dragover {
+      border-color: #3b82f6;
+      background: #1a2340;
+    }
 
+    .file-drop input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .file-drop-label {
+      font-size: 0.9rem;
+      color: #64748b;
+      pointer-events: none;
+    }
+
+    .file-drop-label strong { color: #60a5fa; }
+
+    .file-selected { font-size: 0.85rem; color: #86efac; margin-top: 4px; }
+
+    /* Buttons */
     .btn-generate {
       background: #2563eb;
       color: #fff;
@@ -130,6 +186,7 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Message bars */
     .error-bar {
       background: #3b1212;
       border: 1px solid #7f1d1d;
@@ -152,18 +209,86 @@
       gap: 10px;
     }
 
-    .success-bar a {
-      color: #4ade80;
-      font-weight: 600;
-      text-decoration: none;
-    }
+    .success-bar a { color: #4ade80; font-weight: 600; text-decoration: none; }
     .success-bar a:hover { text-decoration: underline; }
 
-    /* ── Right panel: file list ── */
-    .panel-files {
-      padding: 28px;
+    /* ── Batch progress ── */
+    .batch-summary {
+      font-size: 0.8rem;
+      color: #64748b;
+      display: none;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .batch-summary.visible { display: flex; }
+
+    .batch-count { font-weight: 600; }
+    .batch-count.done { color: #4ade80; }
+    .batch-count.error { color: #f87171; }
+    .batch-count.pending { color: #94a3b8; }
+
+    .batch-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 280px;
       overflow-y: auto;
     }
+
+    .batch-row {
+      background: #141824;
+      border: 1px solid #1e2535;
+      border-radius: 8px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.82rem;
+    }
+
+    .batch-row-name {
+      flex: 1;
+      color: #94a3b8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .badge-pending  { background: #1e2535; color: #64748b; }
+    .badge-working  { background: #1e3a5f; color: #60a5fa; }
+    .badge-done     { background: #14532d; color: #4ade80; }
+    .badge-error    { background: #3b1212; color: #fca5a5; }
+
+    .batch-row-link {
+      color: #4ade80;
+      font-size: 0.75rem;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .batch-row-link:hover { text-decoration: underline; }
+
+    .batch-row-err {
+      color: #f87171;
+      font-size: 0.72rem;
+      flex-shrink: 0;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Right panel: file list ── */
+    .panel-files { padding: 28px; overflow-y: auto; }
 
     .panel-files h2 {
       font-size: 0.8rem;
@@ -174,11 +299,7 @@
       margin-bottom: 16px;
     }
 
-    .file-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
+    .file-list { display: flex; flex-direction: column; gap: 8px; }
 
     .file-item {
       background: #141824;
@@ -236,23 +357,13 @@
       transition: background 0.15s;
     }
 
-    .btn-download {
-      background: #1e3a5f;
-      color: #60a5fa;
-    }
+    .btn-download { background: #1e3a5f; color: #60a5fa; }
     .btn-download:hover { background: #1e40af; color: #93c5fd; }
 
-    .btn-delete {
-      background: #2d1515;
-      color: #f87171;
-    }
+    .btn-delete { background: #2d1515; color: #f87171; }
     .btn-delete:hover { background: #7f1d1d; color: #fca5a5; }
 
-    .empty-state {
-      color: #4a5568;
-      font-size: 0.9rem;
-      margin-top: 12px;
-    }
+    .empty-state { color: #4a5568; font-size: 0.9rem; margin-top: 12px; }
 
     @media (max-width: 768px) {
       .layout { grid-template-columns: 1fr; height: auto; }
@@ -264,51 +375,106 @@
 
 <header>
   <h1>Asterisk Audio Generator</h1>
-  <span>Sunbird TTS · 8 kHz MP3</span>
+  <span>Kokoro · Sunbird · edge-tts · 8 kHz MP3</span>
 </header>
 
 <div class="layout">
 
-  <!-- ── Form ── -->
+  <!-- ── Left panel ── -->
   <div class="panel-form">
-
-    <div class="field">
-      <label>Language</label>
-      <select id="language" onchange="updateSpeakers()" disabled>
-        <option>Loading…</option>
-      </select>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('single', this)">Single</button>
+      <button class="tab-btn" onclick="switchTab('batch', this)">Batch CSV</button>
     </div>
 
-    <div class="field">
-      <label>Speaker</label>
-      <select id="speaker"></select>
+    <div class="tab-content">
+
+      <!-- ── Single tab ── -->
+      <div class="tab-pane active" id="tab-single">
+
+        <div class="field">
+          <label>Language</label>
+          <select id="language" onchange="updateSpeakers('language', 'speaker')" disabled>
+            <option>Loading…</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Voice</label>
+          <select id="speaker"></select>
+        </div>
+
+        <div class="field">
+          <label>Text</label>
+          <textarea id="text" placeholder="Type the words to convert to audio…"></textarea>
+        </div>
+
+        <div class="field">
+          <label>Audio filename</label>
+          <input type="text" id="filename" placeholder="e.g. hash-greeting" />
+          <span class="hint">No extension needed — .mp3 is added automatically</span>
+        </div>
+
+        <div class="error-bar" id="error-bar"></div>
+        <div class="success-bar" id="success-bar">
+          <span>Generated —</span>
+          <a id="success-link" href="#" download>Download file</a>
+        </div>
+
+        <button class="btn-generate" id="btn-generate" onclick="generate()">
+          <div class="spinner" id="spinner"></div>
+          <span id="btn-label">Generate Audio</span>
+        </button>
+
+      </div>
+
+      <!-- ── Batch tab ── -->
+      <div class="tab-pane" id="tab-batch">
+
+        <div class="field">
+          <label>Language</label>
+          <select id="batch-language" onchange="updateSpeakers('batch-language', 'batch-speaker')" disabled>
+            <option>Loading…</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Voice</label>
+          <select id="batch-speaker"></select>
+        </div>
+
+        <div class="field">
+          <label>CSV file</label>
+          <div class="file-drop" id="file-drop">
+            <input type="file" id="batch-file" accept=".csv,text/csv" onchange="onFileSelected(this)" />
+            <div class="file-drop-label">
+              Drop CSV here or <strong>click to browse</strong>
+            </div>
+          </div>
+          <div class="file-selected" id="file-selected" style="display:none"></div>
+          <span class="hint">Two columns: <strong>text</strong>, <strong>filename</strong> — header row optional</span>
+        </div>
+
+        <div class="error-bar" id="batch-error-bar"></div>
+
+        <button class="btn-generate" id="btn-batch" onclick="runBatch()">
+          <div class="spinner" id="batch-spinner"></div>
+          <span id="btn-batch-label">Generate All</span>
+        </button>
+
+        <!-- Progress -->
+        <div class="batch-summary" id="batch-summary">
+          <span class="batch-count done" id="cnt-done">0 done</span>
+          <span class="batch-count error" id="cnt-error" style="display:none">0 errors</span>
+          <span class="batch-count pending" id="cnt-pending"></span>
+        </div>
+        <div class="batch-rows" id="batch-rows"></div>
+
+      </div>
     </div>
-
-    <div class="field">
-      <label>Text</label>
-      <textarea id="text" placeholder="Type the words to convert to audio…"></textarea>
-    </div>
-
-    <div class="field">
-      <label>Audio filename</label>
-      <input type="text" id="filename" placeholder="e.g. hash-greeting" />
-      <span class="hint">No extension needed — .mp3 is added automatically</span>
-    </div>
-
-    <div class="error-bar" id="error-bar"></div>
-    <div class="success-bar" id="success-bar">
-      <span>✓ Generated —</span>
-      <a id="success-link" href="#" download>Download file</a>
-    </div>
-
-    <button class="btn-generate" id="btn-generate" onclick="generate()">
-      <div class="spinner" id="spinner"></div>
-      <span id="btn-label">Generate Audio</span>
-    </button>
-
   </div>
 
-  <!-- ── File list ── -->
+  <!-- ── Right panel: file list ── -->
   <div class="panel-files">
     <h2>Saved files on server</h2>
     <div class="file-list" id="file-list">
@@ -334,30 +500,45 @@
 <script>
   let SPEAKERS = {};
 
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  function switchTab(name, btn) {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(`tab-${name}`).classList.add("active");
+  }
+
+  // ── Speaker loading ────────────────────────────────────────────────────────
   async function loadSpeakers() {
-    const langSel = document.getElementById("language");
-    const spkSel = document.getElementById("speaker");
     try {
       const resp = await fetch("/speakers");
       SPEAKERS = await resp.json();
-      langSel.innerHTML = "";
-      Object.keys(SPEAKERS).forEach(lang => {
-        const opt = document.createElement("option");
-        opt.value = lang;
-        opt.textContent = lang;
-        langSel.appendChild(opt);
+
+      // Populate both single and batch language dropdowns
+      ["language", "batch-language"].forEach(id => {
+        const sel = document.getElementById(id);
+        sel.innerHTML = "";
+        Object.keys(SPEAKERS).forEach(lang => {
+          const opt = document.createElement("option");
+          opt.value = lang;
+          opt.textContent = lang;
+          sel.appendChild(opt);
+        });
+        sel.disabled = false;
       });
-      langSel.disabled = false;
-      updateSpeakers();
+
+      updateSpeakers("language", "speaker");
+      updateSpeakers("batch-language", "batch-speaker");
     } catch {
-      langSel.innerHTML = "<option>Failed to load — check AUTH_TOKEN</option>";
-      spkSel.innerHTML = "";
+      ["language", "batch-language"].forEach(id => {
+        document.getElementById(id).innerHTML = "<option>Failed to load</option>";
+      });
     }
   }
 
-  function updateSpeakers() {
-    const lang = document.getElementById("language").value;
-    const sel = document.getElementById("speaker");
+  function updateSpeakers(langId, speakerId) {
+    const lang = document.getElementById(langId).value;
+    const sel = document.getElementById(speakerId);
     sel.innerHTML = "";
     (SPEAKERS[lang] || []).forEach(s => {
       const opt = document.createElement("option");
@@ -369,20 +550,19 @@
 
   document.addEventListener("DOMContentLoaded", loadSpeakers);
 
+  // ── Single generate ────────────────────────────────────────────────────────
   async function generate() {
     const text = document.getElementById("text").value.trim();
     const filename = document.getElementById("filename").value.trim();
     const language = document.getElementById("language").value;
     const voice = document.getElementById("speaker").value;
 
-    clearMessages();
-
+    clearSingleMessages();
     if (!text) return showError("Text cannot be empty.");
     if (!filename) return showError("Filename cannot be empty.");
     if (!voice) return showError("No voice selected — wait for speakers to load.");
 
     setLoading(true);
-
     try {
       const form = new FormData();
       form.append("text", text);
@@ -392,32 +572,224 @@
 
       const resp = await fetch("/generate", { method: "POST", body: form });
       const data = await resp.json();
-
-      if (!resp.ok) {
-        showError(data.detail || "Generation failed.");
-        return;
-      }
-
+      if (!resp.ok) { showError(data.detail || "Generation failed."); return; }
       showSuccess(data.url, data.filename);
       addFileToList(data.filename);
-
-    } catch (err) {
+    } catch {
       showError("Network error — is the server running?");
     } finally {
       setLoading(false);
     }
   }
 
+  // ── Batch generate ─────────────────────────────────────────────────────────
+  function onFileSelected(input) {
+    const label = document.getElementById("file-selected");
+    if (input.files.length) {
+      label.textContent = input.files[0].name;
+      label.style.display = "block";
+    } else {
+      label.style.display = "none";
+    }
+  }
+
+  // drag-over styling
+  const dropZone = document.getElementById("file-drop");
+  if (dropZone) {
+    dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("dragover");
+      const dt = e.dataTransfer;
+      if (dt.files.length) {
+        document.getElementById("batch-file").files = dt.files;
+        onFileSelected(document.getElementById("batch-file"));
+      }
+    });
+  }
+
+  let batchDone = 0, batchErrors = 0, batchTotal = 0;
+
+  async function runBatch() {
+    const language = document.getElementById("batch-language").value;
+    const voice = document.getElementById("batch-speaker").value;
+    const fileInput = document.getElementById("batch-file");
+
+    clearBatchMessages();
+    if (!fileInput.files.length) return showBatchError("Select a CSV file first.");
+    if (!voice) return showBatchError("No voice selected.");
+
+    setBatchLoading(true);
+    clearBatchProgress();
+
+    const form = new FormData();
+    form.append("file", fileInput.files[0]);
+    form.append("language", language);
+    form.append("voice", voice);
+
+    let resp;
+    try {
+      resp = await fetch("/batch", { method: "POST", body: form });
+    } catch {
+      showBatchError("Network error — is the server running?");
+      setBatchLoading(false);
+      return;
+    }
+
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      showBatchError(data.detail || "Batch failed.");
+      setBatchLoading(false);
+      return;
+    }
+
+    // Read SSE stream
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop();
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            handleBatchEvent(JSON.parse(line.slice(6)));
+          }
+        }
+      }
+    } catch (err) {
+      showBatchError("Stream interrupted: " + err.message);
+    } finally {
+      setBatchLoading(false);
+    }
+  }
+
+  function handleBatchEvent(msg) {
+    switch (msg.type) {
+      case "total":
+        batchTotal = msg.total;
+        batchDone = 0;
+        batchErrors = 0;
+        initBatchRows(msg.total);
+        break;
+      case "start":
+        setBatchRowStatus(msg.index, "working", msg.filename);
+        updateBatchSummary();
+        break;
+      case "done":
+        setBatchRowStatus(msg.index, "done", msg.filename, msg.url);
+        batchDone++;
+        updateBatchSummary();
+        addFileToList(msg.filename);
+        break;
+      case "error":
+        setBatchRowStatus(msg.index, "error", msg.filename, null, msg.detail);
+        batchErrors++;
+        updateBatchSummary();
+        break;
+      case "complete":
+        updateBatchSummary(true);
+        break;
+    }
+  }
+
+  function initBatchRows(total) {
+    const container = document.getElementById("batch-rows");
+    container.innerHTML = "";
+    for (let i = 0; i < total; i++) {
+      const row = document.createElement("div");
+      row.className = "batch-row";
+      row.id = `brow-${i}`;
+
+      const name = document.createElement("span");
+      name.className = "batch-row-name";
+      name.textContent = `Row ${i + 1}`;
+
+      const badge = document.createElement("span");
+      badge.className = "badge badge-pending";
+      badge.textContent = "Pending";
+
+      row.appendChild(name);
+      row.appendChild(badge);
+      container.appendChild(row);
+    }
+    document.getElementById("batch-summary").classList.add("visible");
+    updateBatchSummary();
+  }
+
+  function setBatchRowStatus(index, status, filename, url, errMsg) {
+    const row = document.getElementById(`brow-${index}`);
+    if (!row) return;
+
+    const name = row.querySelector(".batch-row-name");
+    name.textContent = filename;
+
+    // Remove old badge / link / err
+    row.querySelectorAll(".badge, .batch-row-link, .batch-row-err").forEach(el => el.remove());
+
+    const badge = document.createElement("span");
+    if (status === "working") {
+      badge.className = "badge badge-working";
+      badge.textContent = "Generating…";
+    } else if (status === "done") {
+      badge.className = "badge badge-done";
+      badge.textContent = "Done";
+      if (url) {
+        const link = document.createElement("a");
+        link.className = "batch-row-link";
+        link.href = url;
+        link.download = filename;
+        link.textContent = "↓";
+        link.title = `Download ${filename}`;
+        row.appendChild(link);
+      }
+    } else if (status === "error") {
+      badge.className = "badge badge-error";
+      badge.textContent = "Error";
+      if (errMsg) {
+        const err = document.createElement("span");
+        err.className = "batch-row-err";
+        err.title = errMsg;
+        err.textContent = errMsg;
+        row.appendChild(err);
+      }
+    }
+    row.insertBefore(badge, row.children[1]);
+  }
+
+  function updateBatchSummary(complete) {
+    const remaining = batchTotal - batchDone - batchErrors;
+    document.getElementById("cnt-done").textContent = `${batchDone} done`;
+    const errEl = document.getElementById("cnt-error");
+    if (batchErrors > 0) {
+      errEl.textContent = `${batchErrors} error${batchErrors > 1 ? "s" : ""}`;
+      errEl.style.display = "";
+    } else {
+      errEl.style.display = "none";
+    }
+    const pendEl = document.getElementById("cnt-pending");
+    pendEl.textContent = complete ? "Complete" : (remaining > 0 ? `${remaining} remaining` : "");
+  }
+
+  function clearBatchProgress() {
+    document.getElementById("batch-rows").innerHTML = "";
+    document.getElementById("batch-summary").classList.remove("visible");
+    batchDone = 0; batchErrors = 0; batchTotal = 0;
+  }
+
+  // ── File list ──────────────────────────────────────────────────────────────
   async function deleteFile(filename) {
     if (!confirm(`Delete ${filename} from the server?`)) return;
-
     const resp = await fetch(`/files/${encodeURIComponent(filename)}`, { method: "DELETE" });
     if (resp.ok) {
       const el = document.getElementById(`file-${filename}`);
       if (el) el.remove();
-      if (!document.querySelector(".file-item")) {
-        ensureEmptyState();
-      }
+      if (!document.querySelector(".file-item")) ensureEmptyState();
     } else {
       const data = await resp.json().catch(() => ({}));
       alert(data.detail || "Delete failed.");
@@ -426,7 +798,6 @@
 
   function addFileToList(filename) {
     removeEmptyState();
-    // Move to top if already exists
     const existing = document.getElementById(`file-${filename}`);
     if (existing) {
       existing.classList.add("new-file");
@@ -435,7 +806,6 @@
     }
 
     const list = document.getElementById("file-list");
-
     const item = document.createElement("div");
     item.className = "file-item new-file";
     item.id = `file-${filename}`;
@@ -471,13 +841,17 @@
     setTimeout(() => item.classList.remove("new-file"), 2000);
   }
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
   function setLoading(on) {
-    const btn = document.getElementById("btn-generate");
-    const spinner = document.getElementById("spinner");
-    const label = document.getElementById("btn-label");
-    btn.disabled = on;
-    spinner.style.display = on ? "block" : "none";
-    label.textContent = on ? "Generating…" : "Generate Audio";
+    document.getElementById("btn-generate").disabled = on;
+    document.getElementById("spinner").style.display = on ? "block" : "none";
+    document.getElementById("btn-label").textContent = on ? "Generating…" : "Generate Audio";
+  }
+
+  function setBatchLoading(on) {
+    document.getElementById("btn-batch").disabled = on;
+    document.getElementById("batch-spinner").style.display = on ? "block" : "none";
+    document.getElementById("btn-batch-label").textContent = on ? "Generating…" : "Generate All";
   }
 
   function showError(msg) {
@@ -497,9 +871,19 @@
     document.getElementById("error-bar").style.display = "none";
   }
 
-  function clearMessages() {
+  function showBatchError(msg) {
+    const el = document.getElementById("batch-error-bar");
+    el.textContent = msg;
+    el.style.display = "block";
+  }
+
+  function clearSingleMessages() {
     document.getElementById("error-bar").style.display = "none";
     document.getElementById("success-bar").style.display = "none";
+  }
+
+  function clearBatchMessages() {
+    document.getElementById("batch-error-bar").style.display = "none";
   }
 
   function removeEmptyState() {
@@ -518,9 +902,11 @@
     }
   }
 
-  // Allow Ctrl+Enter to submit
-  document.getElementById("text").addEventListener("keydown", e => {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) generate();
+  // Ctrl+Enter in single textarea
+  document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("text").addEventListener("keydown", e => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) generate();
+    });
   });
 </script>
 
