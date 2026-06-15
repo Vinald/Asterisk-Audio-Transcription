@@ -1,0 +1,43 @@
+services:
+  stt-tts-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stt-tts-pipeline
+
+    env_file:
+      - .env
+
+    volumes:
+      - audio_data:/tmp/audio
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+
+    ports:
+      - "8000:8000"
+
+    networks:
+      - stt-tts-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  audio_data:
+
+networks:
+  stt-tts-network:
+    driver: bridge

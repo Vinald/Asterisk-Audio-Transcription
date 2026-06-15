@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Calls{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h5 class="mb-0 fw-semibold">Calls <span class="text-secondary fw-normal small">({{ total_count }})</span></h5>
+  <a href="/export/calls.csv" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-download me-1"></i>Export CSV
+  </a>
+</div>
+
+<!-- Filters -->
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body p-3">
+    <form method="get" action="/dashboard/calls" class="row g-2 align-items-end">
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1">Status</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="">All statuses</option>
+          {% for s in ['completed','in_progress','error_q1','error_q2','no_question','timeout','lang_timeout'] %}
+          <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1">Language</label>
+        <select name="language" class="form-select form-select-sm">
+          <option value="">All languages</option>
+          {% for l in ['English','Luganda','Acholi','Ateso','Runyankore','Lugbara','Swahili'] %}
+          <option value="{{ l }}" {% if filters.language == l %}selected{% endif %}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1">From</label>
+        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ filters.date_from }}">
+      </div>
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1">To</label>
+        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ filters.date_to }}">
+      </div>
+      <div class="col-sm-auto">
+        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+        <a href="/dashboard/calls" class="btn btn-outline-secondary btn-sm ms-1">Clear</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0" style="min-width:900px">
+      <thead>
+        <tr>
+          <th class="px-3" style="min-width:170px">Call ID</th>
+          <th style="min-width:120px">Time</th>
+          <th style="min-width:110px">Caller</th>
+          <th style="min-width:90px">Language</th>
+          <th style="min-width:100px">Status</th>
+          <th style="min-width:180px">Q1 Question</th>
+          <th style="min-width:180px">Q1 Answer</th>
+          <th style="min-width:180px">Q2 Question</th>
+          <th style="min-width:180px">Q2 Answer</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in calls %}
+        <tr class="rc-{{ caller_colors.get(c.caller_id or 'unknown', '') }} clickable-row"
+            onclick="location.href='/dashboard/calls/{{ c.call_id }}'"
+            style="cursor:pointer">
+          <td class="px-3 font-monospace small text-nowrap">{{ c.call_id }}</td>
+          <td class="small text-nowrap">{{ c.timestamp.strftime('%Y-%m-%d %H:%M') if c.timestamp else '—' }}</td>
+          <td class="small">{{ c.caller_id or '—' }}</td>
+          <td class="small">{{ c.language or '—' }}</td>
+          <td>
+            <span class="badge rounded-pill status-badge
+              {% if c.status == 'completed' %}bg-success
+              {% elif 'error' in (c.status or '') %}bg-danger
+              {% elif c.status == 'in_progress' %}bg-primary
+              {% elif 'timeout' in (c.status or '') %}bg-warning text-dark
+              {% else %}bg-secondary
+              {% endif %}">{{ c.status or 'unknown' }}</span>
+          </td>
+          <td class="text-truncate-cell small"
+              title="{{ c.q1_input_text or '' }}">{{ c.q1_input_text or '—' }}</td>
+          <td class="text-truncate-cell small"
+              title="{{ c.q1_output_text or '' }}">{{ c.q1_output_text or '—' }}</td>
+          <td class="text-truncate-cell small"
+              title="{{ c.q2_input_text or '' }}">{{ c.q2_input_text or '—' }}</td>
+          <td class="text-truncate-cell small"
+              title="{{ c.q2_output_text or '' }}">{{ c.q2_output_text or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" class="text-center text-secondary py-4">No calls match the current filters.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {% if total_pages > 1 %}
+  <div class="card-footer bg-transparent d-flex align-items-center justify-content-between py-3 px-4">
+    <span class="text-secondary small">Page {{ page }} of {{ total_pages }}</span>
+    <nav>
+      <ul class="pagination pagination-sm mb-0 gap-1">
+        {% if page > 1 %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page - 1 }}&status={{ filters.status }}&language={{ filters.language }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">
+            <i class="bi bi-chevron-left"></i>
+          </a>
+        </li>
+        {% endif %}
+        {% for p in range([1, page - 2]|max, [total_pages + 1, page + 3]|min) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+          <a class="page-link" href="?page={{ p }}&status={{ filters.status }}&language={{ filters.language }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        {% if page < total_pages %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page + 1 }}&status={{ filters.status }}&language={{ filters.language }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">
+            <i class="bi bi-chevron-right"></i>
+          </a>
+        </li>
+        {% endif %}
+      </ul>
+    </nav>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

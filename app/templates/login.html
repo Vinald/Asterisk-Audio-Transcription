@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Apply saved theme before paint to prevent flash -->
+  <script>document.documentElement.setAttribute('data-bs-theme', localStorage.getItem('theme') || 'dark');</script>
+  <title>Sign in — HASH PBX Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .login-card { width: 360px; }
+  </style>
+</head>
+<body class="d-flex align-items-center justify-content-center min-vh-100 bg-body">
+  <div class="login-card">
+    <div class="text-center mb-4">
+      <div class="text-white fw-bold fs-4">HASH PBX</div>
+      <div class="text-secondary small">Dashboard</div>
+    </div>
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <h5 class="card-title mb-4">Sign in</h5>
+
+        {% if error %}
+        <div class="alert alert-danger py-2 small">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="/login">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Username</label>
+            <input type="text" name="username" class="form-control" autofocus autocomplete="username" required>
+          </div>
+          <div class="mb-4">
+            <label class="form-label small fw-semibold">Password</label>
+            <input type="password" name="password" class="form-control" autocomplete="current-password" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Sign in</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

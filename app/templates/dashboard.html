@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h5 class="mb-0 fw-semibold">Overview</h5>
+  <span class="text-secondary small">All time</span>
+</div>
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="stat-value text-primary">{{ total }}</div>
+        <div class="stat-label">Total calls</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="stat-value text-success">{{ statuses.get('completed', 0) }}</div>
+        <div class="stat-label">Completed</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card border-0 shadow-sm h-100">
+      <div class="card-body">
+        {% set errors = (statuses.get('error_q1', 0) + statuses.get('error_q2', 0)) %}
+        <div class="stat-value text-danger">{{ errors }}</div>
+        <div class="stat-label">Errors</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="stat-value text-secondary">{{ statuses.get('no_question', 0) }}</div>
+        <div class="stat-label">No question</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Language + Status breakdown -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent border-0 pb-0 pt-3 px-4 fw-semibold small">Language Breakdown</div>
+      <div class="card-body px-4">
+        {% for lang, count in languages.items() %}
+        <div class="d-flex align-items-center mb-2">
+          <span class="me-auto small">{{ lang }}</span>
+          <span class="badge bg-primary-subtle text-primary-emphasis rounded-pill">{{ count }}</span>
+        </div>
+        {% if total > 0 %}
+        <div class="progress mb-2" style="height:5px">
+          <div class="progress-bar bg-primary" style="width:{{ (count / total * 100)|round(1) }}%"></div>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="text-secondary small mb-0">No data yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent border-0 pb-0 pt-3 px-4 fw-semibold small">Call Status</div>
+      <div class="card-body px-4">
+        {% for status, count in statuses.items() %}
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="small">{{ status }}</span>
+          <span class="badge rounded-pill
+            {% if status == 'completed' %}bg-success
+            {% elif 'error' in status %}bg-danger
+            {% elif status == 'in_progress' %}bg-primary
+            {% elif 'timeout' in status %}bg-warning text-dark
+            {% else %}bg-secondary
+            {% endif %}">{{ count }}</span>
+        </div>
+        {% else %}
+        <p class="text-secondary small mb-0">No data yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Recent calls -->
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-transparent border-0 pt-3 px-4 d-flex align-items-center justify-content-between">
+    <span class="fw-semibold small">Recent Calls</span>
+    <a href="/dashboard/calls" class="btn btn-sm btn-outline-secondary">View all</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th class="px-4">Call ID</th>
+          <th>Time</th>
+          <th>Caller</th>
+          <th>Language</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in recent %}
+        <tr class="rc-{{ caller_colors.get(c.caller_id or 'unknown', '') }}">
+          <td class="px-4">
+            <a href="/dashboard/calls/{{ c.call_id }}" class="text-decoration-none font-monospace small">{{ c.call_id }}</a>
+          </td>
+          <td class="small">{{ c.timestamp.strftime('%Y-%m-%d %H:%M') if c.timestamp else '—' }}</td>
+          <td class="small">{{ c.caller_id or '—' }}</td>
+          <td class="small">{{ c.language or '—' }}</td>
+          <td>
+            <span class="badge rounded-pill status-badge
+              {% if c.status == 'completed' %}bg-success
+              {% elif 'error' in (c.status or '') %}bg-danger
+              {% elif c.status == 'in_progress' %}bg-primary
+              {% elif 'timeout' in (c.status or '') %}bg-warning text-dark
+              {% else %}bg-secondary
+              {% endif %}">{{ c.status or 'unknown' }}</span>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-secondary py-4">No calls yet.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
