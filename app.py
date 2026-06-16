@@ -31,6 +31,9 @@ MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
 KOKORO_MODEL_PATH = os.path.join(MODEL_DIR, "kokoro-v1.0.int8.onnx")
 KOKORO_VOICES_PATH = os.path.join(MODEL_DIR, "voices-v1.0.bin")
 FILENAME_MAX_LEN = 100
+TEXT_MAX_LEN = 5000       # chars; protects all TTS backends from runaway requests
+BATCH_MAX_ROWS = 500      # rows; prevents DoS via oversized CSVs
+UPLOAD_MAX_BYTES = 2 * 1024 * 1024  # 2 MB CSV limit
 
 # Voice roster — voice ID prefix determines TTS backend:
 #   af_/am_/bf_/bm_ → Kokoro TTS (English, local model)
@@ -120,9 +123,13 @@ async def index(request: Request):
 
 async def _do_generate(request: Request, text: str, filename_raw: str, language: str, voice: str, speed: float = 1.0) -> dict:
     """Synthesise text → 8 kHz mono MP3. Returns {filename, url}."""
+    if len(text) > TEXT_MAX_LEN:
+        raise HTTPException(status_code=400, detail=f"Text too long ({len(text)} chars; limit {TEXT_MAX_LEN})")
     safe_name = filename_raw.strip().replace(" ", "-")
     safe_name = "".join(c for c in safe_name if c.isalnum() or c in "-_")
-    if safe_name.endswith("mp3"):
+    if safe_name.endswith(".mp3"):
+        safe_name = safe_name[:-4]
+    elif safe_name.endswith("mp3"):
         safe_name = safe_name[:-3].rstrip(".")
     safe_name = safe_name[:FILENAME_MAX_LEN]
     if not safe_name:
@@ -192,7 +199,7 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
             fd, tmp_path = tempfile.mkstemp(suffix=".mp3")
             os.close(fd)
             # Convert speed multiplier to edge-tts rate string: 0.75 → "-25%", 1.25 → "+25%"
-            rate = f"{int((speed - 1.0) * 100):+d}%"
+            rate = f"{round((speed - 1.0) * 100):+d}%"
             communicate = edge_tts.Communicate(text, voice, rate=rate)
             await communicate.save(tmp_path)
 
@@ -203,7 +210,9 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
         )
         _, stderr = await proc.communicate()
         if proc.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"sox conversion failed: {stderr.decode()}")
+            # Truncate stderr to avoid leaking full temp paths / system details
+            err_snippet = stderr.decode(errors="replace")[:200]
+            raise HTTPException(status_code=500, detail=f"Audio conversion failed: {err_snippet}")
 
     except HTTPException:
         raise
@@ -227,8 +236,9 @@ async def generate(
 ):
     if language not in VOICES:
         raise HTTPException(status_code=400, detail=f"Unknown language: {language}")
-    if voice not in _VALID_VOICES:
-        raise HTTPException(status_code=400, detail=f"Unknown voice: {voice}")
+    valid_for_lang = {v["id"] for v in VOICES[language]}
+    if voice not in valid_for_lang:
+        raise HTTPException(status_code=400, detail=f"Voice {voice!r} is not available for {language}")
     speed = max(0.5, min(2.0, speed))
     return JSONResponse(await _do_generate(request, text, filename, language, voice, speed))
 
@@ -243,11 +253,16 @@ async def batch_generate(
 ):
     if language not in VOICES:
         raise HTTPException(status_code=400, detail=f"Unknown language: {language}")
-    if voice not in _VALID_VOICES:
-        raise HTTPException(status_code=400, detail=f"Unknown voice: {voice}")
+    valid_for_lang = {v["id"] for v in VOICES[language]}
+    if voice not in valid_for_lang:
+        raise HTTPException(status_code=400, detail=f"Voice {voice!r} is not available for {language}")
     speed = max(0.5, min(2.0, speed))
 
+    if file.size is not None and file.size > UPLOAD_MAX_BYTES:
+        raise HTTPException(status_code=413, detail=f"CSV too large (limit {UPLOAD_MAX_BYTES // 1024} KB)")
     content = await file.read()
+    if len(content) > UPLOAD_MAX_BYTES:
+        raise HTTPException(status_code=413, detail=f"CSV too large (limit {UPLOAD_MAX_BYTES // 1024} KB)")
     for enc in ("utf-8-sig", "utf-8", "latin-1"):
         try:
             text_content = content.decode(enc)
@@ -277,10 +292,14 @@ async def batch_generate(
             status_code=400,
             detail="CSV has no valid rows. Expected two columns: text, filename (header row optional)",
         )
+    if len(rows) > BATCH_MAX_ROWS:
+        raise HTTPException(status_code=400, detail=f"CSV has {len(rows)} rows; limit is {BATCH_MAX_ROWS}")
 
     async def stream():
         yield f"data: {json.dumps({'type': 'total', 'total': len(rows)})}\n\n"
         for i, (txt, fname) in enumerate(rows):
+            if await request.is_disconnected():
+                break
             yield f"data: {json.dumps({'type': 'start', 'index': i, 'filename': fname})}\n\n"
             try:
                 result = await _do_generate(request, txt, fname, language, voice, speed)

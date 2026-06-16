@@ -636,8 +636,9 @@
   // ── Batch generate ─────────────────────────────────────────────────────────
   function onFileSelected(input) {
     const label = document.getElementById("file-selected");
-    if (input.files.length) {
-      label.textContent = input.files[0].name;
+    const f = input.files[0] || window._droppedFile;
+    if (f) {
+      label.textContent = f.name;
       label.style.display = "block";
     } else {
       label.style.display = "none";
@@ -654,7 +655,15 @@
       dropZone.classList.remove("dragover");
       const dt = e.dataTransfer;
       if (dt.files.length) {
-        document.getElementById("batch-file").files = dt.files;
+        // Wrap in new DataTransfer so Firefox accepts the assignment to input.files
+        try {
+          const transfer = new DataTransfer();
+          for (const f of dt.files) transfer.items.add(f);
+          document.getElementById("batch-file").files = transfer.files;
+        } catch {
+          // Fallback: store file reference and use it directly in runBatch
+          window._droppedFile = dt.files[0];
+        }
         onFileSelected(document.getElementById("batch-file"));
       }
     });
@@ -668,15 +677,17 @@
     const fileInput = document.getElementById("batch-file");
 
     clearBatchMessages();
-    if (!fileInput.files.length) return showBatchError("Select a CSV file first.");
+    const csvFile = fileInput.files[0] || window._droppedFile;
+    if (!csvFile) return showBatchError("Select a CSV file first.");
     if (!voice) return showBatchError("No voice selected.");
 
     setBatchLoading(true);
     clearBatchProgress();
+    window._droppedFile = null;
 
     const speed = document.getElementById("batch-speed").value;
     const form = new FormData();
-    form.append("file", fileInput.files[0]);
+    form.append("file", csvFile);
     form.append("language", language);
     form.append("voice", voice);
     form.append("speed", speed);
@@ -698,6 +709,11 @@
     }
 
     // Read SSE stream
+    if (!resp.body) {
+      showBatchError("Streaming not supported in this browser — try Chrome or Firefox.");
+      setBatchLoading(false);
+      return;
+    }
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buf = "";
