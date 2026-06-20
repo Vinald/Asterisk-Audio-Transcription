@@ -118,7 +118,7 @@ async def speakers():
 async def index(request: Request):
     all_files = await asyncio.to_thread(os.listdir, MEDIA_DIR)
     files = sorted(f for f in all_files if f.endswith(".mp3"))
-    return templates.TemplateResponse("index.html", {"request": request, "files": files})
+    return templates.TemplateResponse(request, "index.html", {"files": files})
 
 
 async def _do_generate(request: Request, text: str, filename_raw: str, language: str, voice: str, speed: float = 1.0) -> dict:
