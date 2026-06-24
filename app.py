@@ -204,7 +204,7 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
             await communicate.save(tmp_path)
 
         proc = await asyncio.create_subprocess_exec(
-            "sox", "-t", sox_fmt, tmp_path, "-r", "8000", "-c", "1", out_path,
+            "sox", "-t", sox_fmt, tmp_path, "-r", "48000", "-c", "1", out_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
