@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Asterisk Audio Generator</title>
+  <title>Asterisk Audio &amp; Transcription</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -403,8 +403,9 @@
 <body>
 
 <header>
-  <h1>Asterisk Audio Generator</h1>
-  <span>Kokoro · Sunbird · edge-tts · 8 kHz MP3</span>
+  <h1>Asterisk Audio &amp; Transcription</h1>
+  <span>TTS: Kokoro · Sunbird · edge-tts</span>
+  <span>STT: Sunbird · Whisper</span>
 </header>
 
 <div class="layout">
@@ -414,6 +415,7 @@
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab('single', this)">Single</button>
       <button class="tab-btn" onclick="switchTab('batch', this)">Batch CSV</button>
+      <button class="tab-btn" onclick="switchTab('stt', this)">Transcribe</button>
     </div>
 
     <div class="tab-content">
@@ -518,6 +520,59 @@
           <span class="batch-count pending" id="cnt-pending"></span>
         </div>
         <div class="batch-rows" id="batch-rows"></div>
+
+      </div>
+
+      <!-- ── Transcribe (STT) tab ── -->
+      <div class="tab-pane" id="tab-stt">
+
+        <div class="field">
+          <label>Backend</label>
+          <select id="stt-backend" onchange="updateSttLanguages()" disabled>
+            <option>Loading…</option>
+          </select>
+          <span class="hint" id="stt-backend-note"></span>
+        </div>
+
+        <div class="field">
+          <label>Spoken language</label>
+          <select id="stt-language"></select>
+        </div>
+
+        <div class="field">
+          <label>Audio file</label>
+          <div class="file-drop" id="stt-file-drop">
+            <input type="file" id="stt-file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.webm" onchange="onSttFileSelected(this)" />
+            <div class="file-drop-label">
+              Drop audio here or <strong>click to browse</strong>
+            </div>
+          </div>
+          <div class="file-selected" id="stt-file-selected" style="display:none"></div>
+          <span class="hint">wav, mp3, m4a, ogg, flac, webm — up to 25 MB</span>
+        </div>
+
+        <div class="field">
+          <label style="text-transform:none;display:flex;align-items:center;gap:8px;font-weight:500">
+            <input type="checkbox" id="stt-timestamps" style="width:auto;accent-color:#3b82f6" />
+            Include per-segment timestamps
+          </label>
+        </div>
+
+        <div class="error-bar" id="stt-error-bar"></div>
+
+        <button class="btn-generate" id="btn-stt" onclick="runTranscribe()">
+          <div class="spinner" id="stt-spinner"></div>
+          <span id="btn-stt-label">Transcribe</span>
+        </button>
+
+        <div class="field" id="stt-result-wrap" style="display:none">
+          <label>Transcript <span id="stt-result-meta" style="text-transform:none;font-size:0.7rem;color:#4a5568"></span></label>
+          <textarea id="stt-result" readonly placeholder="Transcript appears here…"></textarea>
+          <div style="display:flex;gap:8px">
+            <button class="btn-download" type="button" onclick="copyTranscript()">⧉ Copy</button>
+            <button class="btn-download" type="button" onclick="downloadTranscript()">↓ Save .txt</button>
+          </div>
+        </div>
 
       </div>
     </div>
@@ -850,6 +905,150 @@
     document.getElementById("batch-summary").classList.remove("visible");
     batchDone = 0; batchErrors = 0; batchTotal = 0;
   }
+
+  // ── Transcribe (STT) ───────────────────────────────────────────────────────
+  let STT_BACKENDS = {};
+  let lastTranscript = "";
+
+  async function loadSttBackends() {
+    try {
+      const resp = await fetch("/stt-backends");
+      STT_BACKENDS = await resp.json();
+      const sel = document.getElementById("stt-backend");
+      sel.innerHTML = "";
+      Object.entries(STT_BACKENDS).forEach(([id, b]) => {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = b.enabled ? b.name : `${b.name} — unavailable`;
+        opt.disabled = !b.enabled;
+        sel.appendChild(opt);
+      });
+      const firstEnabled = Object.entries(STT_BACKENDS).find(([, b]) => b.enabled);
+      if (firstEnabled) sel.value = firstEnabled[0];
+      sel.disabled = false;
+      updateSttLanguages();
+    } catch {
+      document.getElementById("stt-backend").innerHTML = "<option>Failed to load</option>";
+    }
+  }
+
+  function updateSttLanguages() {
+    const id = document.getElementById("stt-backend").value;
+    const b = STT_BACKENDS[id] || { languages: {}, note: "" };
+    const sel = document.getElementById("stt-language");
+    sel.innerHTML = "";
+    Object.entries(b.languages).forEach(([code, name]) => {
+      const opt = document.createElement("option");
+      opt.value = code;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    });
+    document.getElementById("stt-backend-note").textContent = b.note || "";
+  }
+
+  function onSttFileSelected(input) {
+    const label = document.getElementById("stt-file-selected");
+    const f = input.files[0] || window._sttDroppedFile;
+    if (f) { label.textContent = f.name; label.style.display = "block"; }
+    else { label.style.display = "none"; }
+  }
+
+  const sttDropZone = document.getElementById("stt-file-drop");
+  if (sttDropZone) {
+    sttDropZone.addEventListener("dragover", e => { e.preventDefault(); sttDropZone.classList.add("dragover"); });
+    sttDropZone.addEventListener("dragleave", () => sttDropZone.classList.remove("dragover"));
+    sttDropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      sttDropZone.classList.remove("dragover");
+      const dt = e.dataTransfer;
+      if (dt.files.length) {
+        try {
+          const transfer = new DataTransfer();
+          for (const f of dt.files) transfer.items.add(f);
+          document.getElementById("stt-file").files = transfer.files;
+        } catch {
+          window._sttDroppedFile = dt.files[0];
+        }
+        onSttFileSelected(document.getElementById("stt-file"));
+      }
+    });
+  }
+
+  function setSttLoading(on) {
+    document.getElementById("btn-stt").disabled = on;
+    document.getElementById("stt-spinner").style.display = on ? "block" : "none";
+    document.getElementById("btn-stt-label").textContent = on ? "Transcribing…" : "Transcribe";
+  }
+
+  function showSttError(msg) {
+    const el = document.getElementById("stt-error-bar");
+    el.textContent = msg;
+    el.style.display = "block";
+  }
+
+  async function runTranscribe() {
+    const backend = document.getElementById("stt-backend").value;
+    const language = document.getElementById("stt-language").value;
+    const timestamps = document.getElementById("stt-timestamps").checked;
+    const fileInput = document.getElementById("stt-file");
+    const audioFile = fileInput.files[0] || window._sttDroppedFile;
+
+    document.getElementById("stt-error-bar").style.display = "none";
+    if (!audioFile) return showSttError("Select an audio file first.");
+    if (!backend) return showSttError("No backend selected.");
+
+    setSttLoading(true);
+    const form = new FormData();
+    form.append("audio", audioFile);
+    form.append("backend", backend);
+    form.append("language", language);
+    form.append("timestamps", timestamps ? "true" : "false");
+
+    try {
+      const resp = await fetch("/transcribe", { method: "POST", body: form });
+      const data = await resp.json();
+      if (!resp.ok) { showSttError(data.detail || "Transcription failed."); return; }
+
+      let out = data.text;
+      if (timestamps && data.segments && data.segments.length) {
+        const fmt = s => {
+          if (s == null) return "?";
+          const m = Math.floor(s / 60), sec = (s % 60).toFixed(1).padStart(4, "0");
+          return `${m}:${sec}`;
+        };
+        out += "\n\n— segments —\n" + data.segments
+          .map(s => `[${fmt(s.start)} → ${fmt(s.end)}] ${s.text}`).join("\n");
+      }
+      lastTranscript = data.text;
+      document.getElementById("stt-result").value = out;
+      const dur = data.duration != null ? `${data.duration}s · ` : "";
+      document.getElementById("stt-result-meta").textContent = `(${dur}${data.backend} · ${data.language})`;
+      document.getElementById("stt-result-wrap").style.display = "flex";
+    } catch {
+      showSttError("Network error — is the server running?");
+    } finally {
+      setSttLoading(false);
+    }
+  }
+
+  function copyTranscript() {
+    const el = document.getElementById("stt-result");
+    navigator.clipboard?.writeText(el.value).catch(() => {
+      el.select();
+      document.execCommand("copy");
+    });
+  }
+
+  function downloadTranscript() {
+    const blob = new Blob([document.getElementById("stt-result").value], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "transcript.txt";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  document.addEventListener("DOMContentLoaded", loadSttBackends);
 
   // ── File list ──────────────────────────────────────────────────────────────
   async function deleteFile(filename) {

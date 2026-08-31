@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-install.py — Asterisk Audio Generator installer.
+install.py — Asterisk Audio & Transcription installer.
 
 Sets up the Python virtual environment, installs dependencies,
 validates the environment, and prints how to start the app.
@@ -117,6 +117,7 @@ print("[*] Installing packages (this may take a moment) ...")
 subprocess.run([pip, "install", "--upgrade", "pip", "-q"], check=True)
 subprocess.run([pip, "install", "-r", REQUIREMENTS, "-q"], check=True)
 ok("All packages installed")
+print("[*] faster-whisper (local STT) model is downloaded on first transcription, not now.")
 
 # Verify edge-tts can reach Microsoft's neural TTS service
 print("[*] Checking edge-tts connectivity...")
@@ -127,8 +128,8 @@ if _voice_check.returncode != 0:
 else:
     ok("edge-tts reachable — English and Swahili voices available")
 
-# Check AUTH_TOKEN for Luganda (Sunbird AI) — optional but required for Luganda
-print("[*] Checking AUTH_TOKEN for Luganda (Sunbird AI)...")
+# Check AUTH_TOKEN (Sunbird AI) — optional, powers Luganda TTS + Sunbird STT
+print("[*] Checking AUTH_TOKEN for Sunbird AI (Luganda TTS + STT)...")
 _auth = ""
 if os.path.exists(ENV_FILE):
     with open(ENV_FILE) as _f:
@@ -137,10 +138,23 @@ if os.path.exists(ENV_FILE):
                 _auth = _line.split("=", 1)[1].strip()
                 break
 if not _auth or "your_" in _auth.lower():
-    warn("AUTH_TOKEN not set — Luganda voices will return an error. English and Swahili work fine without it.")
-    warn("To enable Luganda: add AUTH_TOKEN=<your_sunbird_token> to .env and restart.")
+    warn("AUTH_TOKEN not set — Luganda voices and Sunbird STT will return an error.")
+    warn("English/Swahili TTS and local faster-whisper STT work fine without it.")
+    warn("To enable Sunbird: add AUTH_TOKEN=<your_sunbird_token> to .env and restart.")
 else:
-    ok("AUTH_TOKEN found — Luganda (Sunbird AI) enabled")
+    ok("AUTH_TOKEN found — Sunbird AI (Luganda TTS + STT) enabled")
+
+_openai = ""
+if os.path.exists(ENV_FILE):
+    with open(ENV_FILE) as _f:
+        for _line in _f:
+            if _line.startswith("OPENAI_API_KEY="):
+                _openai = _line.split("=", 1)[1].strip()
+                break
+if _openai and "sk-" in _openai:
+    ok("OPENAI_API_KEY found — OpenAI Whisper STT backend enabled")
+else:
+    warn("OPENAI_API_KEY not set — OpenAI Whisper STT backend disabled (optional).")
 
 
 # ── 5. Kokoro TTS model files ─────────────────────────────────────────────────

@@ -1,7 +1,10 @@
-# Asterisk Audio Generator
+# Asterisk Audio & Transcription
 
-A web tool for producing Asterisk-compatible **8 kHz mono MP3** audio files from text.
-Supports three TTS backends selectable per generation:
+A web tool for **text-to-speech** (producing Asterisk-compatible mono MP3 audio from
+text) and **speech-to-text** (transcribing audio files). Every backend is selectable
+per request.
+
+### Text-to-speech
 
 | Language | Provider | Notes |
 |---|---|---|
@@ -9,6 +12,14 @@ Supports three TTS backends selectable per generation:
 | English (1 voice) | **Sunbird AI** | Cloud — requires `AUTH_TOKEN` |
 | Luganda | **Sunbird AI** | Cloud — requires `AUTH_TOKEN` |
 | Swahili (4 voices) | **edge-tts** | Microsoft neural cloud — no API key |
+
+### Speech-to-text
+
+| Backend | Coverage | Notes |
+|---|---|---|
+| **Sunbird AI** | 51 African languages (Luganda, Swahili, Acholi, Ateso, Runyankole, …) | Cloud — reuses `AUTH_TOKEN` |
+| **faster-whisper** | ~90 languages, auto-detect | Local model — no API key; downloads on first use |
+| **OpenAI Whisper API** | ~90 languages, auto-detect | Cloud — requires `OPENAI_API_KEY` |
 
 ---
 
@@ -40,18 +51,24 @@ Steps the installer performs:
 6. Kokoro model download (`models/kokoro-v1.0.int8.onnx` + `voices-v1.0.bin`)
 7. `media/` directory creation
 
-### Auth token (Sunbird voices only)
+The faster-whisper model is **not** downloaded by the installer — it is fetched
+automatically (and cached under `~/.cache/huggingface`) the first time you use the
+local transcription backend.
 
-Sunbird voices (Luganda and the "Sunbird 248" English option) require a free API token.
-Create an account at [api.sunbird.ai](https://api.sunbird.ai), generate a Bearer token,
-then add it to `.env`:
+### API tokens
+
+| Token | Enables | Where |
+|---|---|---|
+| `AUTH_TOKEN` | Sunbird TTS voices (Luganda, "Sunbird 248") **and** Sunbird STT | free account at [api.sunbird.ai](https://api.sunbird.ai) |
+| `OPENAI_API_KEY` | OpenAI Whisper STT backend (optional) | [platform.openai.com](https://platform.openai.com) |
 
 ```bash
 cp .env.example .env
 # edit .env and set:  AUTH_TOKEN=<your_sunbird_token>
 ```
 
-English (Kokoro) and Swahili (edge-tts) voices work without any token.
+English (Kokoro) and Swahili (edge-tts) voices, and the local faster-whisper
+transcription backend, all work without any token.
 
 ---
 
@@ -80,7 +97,7 @@ docker compose up -d
 
 ## Using the UI
 
-### Single file
+### Single file (text-to-speech)
 
 1. Select **Language** and **Voice** from the dropdowns.
 2. Type the text to speak.
@@ -90,7 +107,7 @@ docker compose up -d
 
 The file appears in the right-hand list and can be downloaded or deleted.
 
-### Batch CSV
+### Batch CSV (text-to-speech)
 
 1. Click the **Batch CSV** tab.
 2. Select Language and Voice (applies to all rows).
@@ -113,6 +130,19 @@ Thank you and goodbye,goodbye
 ```
 
 Limits: 500 rows maximum, 2 MB file size, 5 000 characters per text cell.
+
+### Transcribe (speech-to-text)
+
+1. Click the **Transcribe** tab.
+2. Choose a **Backend** (Sunbird / faster-whisper / OpenAI). Backends without a
+   configured token are shown as *unavailable*.
+3. Pick the **spoken language**. Sunbird needs an explicit language; the Whisper
+   backends also offer **Auto-detect**.
+4. Upload or drag-and-drop an audio file (wav, mp3, m4a, ogg, flac, webm — up to 25 MB).
+5. Optionally tick **Include per-segment timestamps**.
+6. Click **Transcribe**.
+
+The transcript appears below with **Copy** and **Save .txt** buttons.
 
 ---
 
@@ -162,7 +192,7 @@ Limits: 500 rows maximum, 2 MB file size, 5 000 characters per text cell.
 
 ### `GET /speakers`
 
-Returns the full voice roster as JSON.
+Returns the full TTS voice roster as JSON.
 
 ```json
 {
@@ -214,6 +244,43 @@ SSE event types:
 | `error` | `{index, filename, detail}` |
 | `complete` | `{}` |
 
+### `GET /stt-backends`
+
+Returns the STT backend roster — id → `{name, enabled, note, languages}`.
+`languages` maps a language code to its display name (`auto` = detect, for the
+Whisper backends).
+
+```json
+{
+  "sunbird": {"name": "Sunbird AI — …", "enabled": true, "note": "", "languages": {"lug": "Luganda", ...}},
+  "whisper": {"name": "faster-whisper 'base' — …", "enabled": true, "note": "Downloads the model on first use", "languages": {"auto": "Auto-detect", ...}},
+  "openai":  {"name": "OpenAI Whisper API (cloud)", "enabled": false, "note": "Set OPENAI_API_KEY in .env", "languages": {...}}
+}
+```
+
+### `POST /transcribe`
+
+Transcribe an audio file.
+
+| Field | Type | Description |
+|---|---|---|
+| `audio` | file | Audio upload (max 25 MB) |
+| `backend` | string | `sunbird` \| `whisper` \| `openai` (default `sunbird`) |
+| `language` | string | Language code valid for the backend (`auto` for the Whisper backends) |
+| `timestamps` | bool | Include per-segment start/end times (default `false`) |
+
+Response:
+
+```json
+{
+  "text": "Hello, this is a test of the transcription system.",
+  "language": "eng",
+  "duration": 2.83,
+  "segments": [{"start": 0.0, "end": 2.83, "text": "Hello, this is a test …"}],
+  "backend": "sunbird"
+}
+```
+
 ### `GET /files`
 
 List all generated MP3s.
@@ -234,20 +301,33 @@ Delete a file from `media/`.
 
 ---
 
-## How audio is produced
+## How audio is produced (TTS)
 
 ```
 Text input
     │
     ├─ Kokoro voice  → numpy float32 at 24 kHz → 16-bit PCM WAV
-    ├─ Sunbird voice → POST api.sunbird.ai → download WAV
+    ├─ Sunbird voice → POST api.sunbird.ai → download WAV/MP3
     └─ edge-tts voice → Microsoft neural cloud → MP3
     │
     ▼
-sox → resample to 8 000 Hz, mono, MP3
+sox → resample to mono MP3
     │
     ▼
 media/<filename>.mp3   (Asterisk-compatible)
+```
+
+## How audio is transcribed (STT)
+
+```
+Audio upload  →  temp file
+    │
+    ├─ sunbird → POST api.sunbird.ai/tasks/audio/transcriptions (Bearer AUTH_TOKEN)
+    ├─ whisper → faster-whisper WhisperModel(WHISPER_MODEL, cpu, int8), VAD filter
+    └─ openai  → POST api.openai.com/v1/audio/transcriptions (whisper-1)
+    │
+    ▼
+{ text, language, duration, segments }
 ```
 
 ---
@@ -255,15 +335,15 @@ media/<filename>.mp3   (Asterisk-compatible)
 ## Project structure
 
 ```
-audio-generator/
-├── app.py                 # FastAPI app — TTS routing, /generate, /batch, /files
+Asterisk-Audio-Transcription/
+├── app.py                 # FastAPI app — TTS + STT routing
 ├── install.py             # One-shot installer
 ├── requirements.txt
 ├── .env.example
 ├── Dockerfile
 ├── docker-compose.yml
 ├── templates/
-│   └── index.html         # Single-page UI (Single + Batch CSV tabs)
+│   └── index.html         # Single-page UI (Single + Batch CSV + Transcribe tabs)
 ├── models/                # Kokoro model files (gitignored, downloaded by install.py)
 │   ├── kokoro-v1.0.int8.onnx
 │   └── voices-v1.0.bin
@@ -276,7 +356,9 @@ audio-generator/
 
 | Variable | Required | Description |
 |---|---|---|
-| `AUTH_TOKEN` | Only for Sunbird voices | Sunbird AI Bearer token |
+| `AUTH_TOKEN` | For Sunbird TTS voices and Sunbird STT | Sunbird AI Bearer token |
+| `OPENAI_API_KEY` | For the OpenAI Whisper STT backend | OpenAI API key |
+| `WHISPER_MODEL` | No (default `base`) | faster-whisper size: `tiny`, `base`, `small`, `medium`, `large-v3` |
 
 ---
 
@@ -289,7 +371,15 @@ Kokoro model files missing in models/
 Run `python install.py` — step 5 downloads the model files.
 
 **Sunbird returns 401**
-Check that `AUTH_TOKEN` in `.env` is a valid Sunbird token and the server was restarted after editing `.env`.
+Check that `AUTH_TOKEN` in `.env` is a valid Sunbird token and the server was restarted after editing `.env`. The same token is used for Sunbird TTS and STT.
+
+**First transcription with faster-whisper is slow**
+The model (~150 MB for `base`) downloads on first use and is then cached. Subsequent
+requests reuse the in-memory model. Pick a smaller `WHISPER_MODEL` for speed or a
+larger one for accuracy.
+
+**`faster-whisper is not installed`**
+Run `pip install -r requirements.txt` inside the virtualenv.
 
 **sox cannot encode MP3 on Linux**
 ```bash
