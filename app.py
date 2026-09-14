@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(na
 AUTH_TOKEN = os.getenv("AUTH_TOKEN", "")   # required for any Sunbird voice or Sunbird STT
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")   # optional — enables the OpenAI Whisper STT backend
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")  # faster-whisper size: tiny|base|small|medium|large-v3
-SUNBIRD_TTS_URL = "https://api.sunbird.ai/tasks/modal/tts"
+SUNBIRD_TTS_URL = "https://api.sunbird.ai/tasks/audio/speech"
 SUNBIRD_STT_URL = "https://api.sunbird.ai/tasks/audio/transcriptions"
 OPENAI_STT_URL = "https://api.openai.com/v1/audio/transcriptions"
 MEDIA_DIR = os.path.join(os.path.dirname(__file__), "media")
@@ -60,10 +60,10 @@ VOICES = {
         {"id": "bm_george",   "name": "George — GB male (Kokoro)"},
         {"id": "bm_lewis",    "name": "Lewis — GB male (Kokoro)"},
         # ── Sunbird AI (cloud) ──
-        {"id": "sunbird:248", "name": "Sunbird 248 — English female (Sunbird)"},
+        {"id": "sunbird:eng:salt_eng_0001", "name": "Sunbird — English (Sunbird)"},
     ],
     "Luganda": [
-        {"id": "sunbird:248", "name": "Sunbird — Luganda (female)"},
+        {"id": "sunbird:lug:salt_lug_0001", "name": "Sunbird — Luganda (Sunbird)"},
     ],
     "Swahili": [
         {"id": "sw-KE-ZuriNeural",   "name": "Zuri — Swahili KE (female)"},
@@ -236,7 +236,7 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
             # ── Sunbird AI (English / Luganda) ───────────────────────────────
             if not AUTH_TOKEN:
                 raise HTTPException(status_code=503, detail="Sunbird voices require AUTH_TOKEN in .env")
-            speaker_id = int(voice.split(":")[1])
+            _, sunbird_lang, sunbird_speaker = voice.split(":", 2)
             client: httpx.AsyncClient = request.app.state.http
             resp = await client.post(
                 SUNBIRD_TTS_URL,
@@ -245,7 +245,12 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
                     "Authorization": f"Bearer {AUTH_TOKEN}",
                     "Content-Type": "application/json",
                 },
-                json={"response_mode": "url", "speaker_id": speaker_id, "text": text},
+                json={
+                    "response_mode": "url",
+                    "voice": sunbird_speaker,
+                    "language": sunbird_lang,
+                    "text": text,
+                },
                 timeout=60,
             )
             if resp.status_code == 401:

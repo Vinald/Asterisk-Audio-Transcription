@@ -389,10 +389,38 @@
     .btn-download { background: #1e3a5f; color: #60a5fa; }
     .btn-download:hover { background: #1e40af; color: #93c5fd; }
 
+    .btn-preview { background: #164e3f; color: #34d399; }
+    .btn-preview:hover { background: #065f46; color: #6ee7b7; }
+
     .btn-delete { background: #2d1515; color: #f87171; }
     .btn-delete:hover { background: #7f1d1d; color: #fca5a5; }
 
     .empty-state { color: #4a5568; font-size: 0.9rem; margin-top: 12px; }
+
+    /* ── Inline audio preview ── */
+    .file-item { flex-wrap: wrap; }
+
+    .file-audio {
+      display: none;
+      flex-basis: 100%;
+      width: 100%;
+      height: 32px;
+      margin-top: 4px;
+    }
+
+    .file-audio.visible { display: block; }
+
+    .batch-row { flex-wrap: wrap; }
+
+    .batch-row-audio {
+      display: none;
+      flex-basis: 100%;
+      width: 100%;
+      height: 30px;
+      margin-top: 4px;
+    }
+
+    .batch-row-audio.visible { display: block; }
 
     @media (max-width: 768px) {
       .layout { grid-template-columns: 1fr; height: auto; }
@@ -460,7 +488,9 @@
         <div class="success-bar" id="success-bar">
           <span>Generated —</span>
           <a id="success-link" href="#" download>Download file</a>
+          <button class="btn-preview" id="success-preview-btn" type="button" onclick="toggleSuccessPreview()">▶ Preview</button>
         </div>
+        <audio class="file-audio" id="success-audio" preload="none" controls></audio>
 
         <button class="btn-generate" id="btn-generate" onclick="generate()">
           <div class="spinner" id="spinner"></div>
@@ -588,9 +618,11 @@
           <div class="file-icon">🔊</div>
           <span class="file-name">{{ f }}</span>
           <div class="file-actions">
+            <button class="btn-preview" id="preview-btn-{{ f }}" onclick="togglePreview('{{ f }}')">▶ Preview</button>
             <a class="btn-download" href="/media/{{ f }}" download="{{ f }}">↓ Download</a>
             <button class="btn-delete" onclick="deleteFile('{{ f }}')">✕ Delete</button>
           </div>
+          <audio class="file-audio" id="audio-{{ f }}" preload="none" controls src="/media/{{ f }}"></audio>
         </div>
         {% endfor %}
       {% else %}
@@ -653,6 +685,66 @@
   }
 
   document.addEventListener("DOMContentLoaded", loadSpeakers);
+
+  // ── Inline audio preview ───────────────────────────────────────────────────
+  function stopAllPreviewsExcept(exceptAudio) {
+    document.querySelectorAll("audio.file-audio, audio.batch-row-audio").forEach(a => {
+      if (a === exceptAudio) return;
+      a.pause();
+      a.classList.remove("visible");
+    });
+    document.querySelectorAll(".btn-preview").forEach(b => b.textContent = "▶ Preview");
+    document.querySelectorAll("[id^='brow-preview-btn-']").forEach(b => b.textContent = "▶");
+  }
+
+  function togglePreview(filename) {
+    const audio = document.getElementById(`audio-${filename}`);
+    const btn = document.getElementById(`preview-btn-${filename}`);
+    if (!audio) return;
+    if (audio.classList.contains("visible")) {
+      audio.pause();
+      audio.classList.remove("visible");
+      if (btn) btn.textContent = "▶ Preview";
+    } else {
+      stopAllPreviewsExcept(audio);
+      audio.classList.add("visible");
+      audio.play().catch(() => {});
+      if (btn) btn.textContent = "❚❚ Hide";
+    }
+  }
+
+  function toggleBatchRowPreview(index, url) {
+    const audio = document.getElementById(`brow-audio-${index}`);
+    const btn = document.getElementById(`brow-preview-btn-${index}`);
+    if (!audio) return;
+    if (audio.classList.contains("visible")) {
+      audio.pause();
+      audio.classList.remove("visible");
+      if (btn) btn.textContent = "▶";
+    } else {
+      stopAllPreviewsExcept(audio);
+      if (!audio.src) audio.src = url;
+      audio.classList.add("visible");
+      audio.play().catch(() => {});
+      if (btn) btn.textContent = "❚❚";
+    }
+  }
+
+  function toggleSuccessPreview() {
+    const audio = document.getElementById("success-audio");
+    const btn = document.getElementById("success-preview-btn");
+    if (!audio || !audio.src) return;
+    if (audio.classList.contains("visible")) {
+      audio.pause();
+      audio.classList.remove("visible");
+      btn.textContent = "▶ Preview";
+    } else {
+      stopAllPreviewsExcept(audio);
+      audio.classList.add("visible");
+      audio.play().catch(() => {});
+      btn.textContent = "❚❚ Hide";
+    }
+  }
 
   // ── Single generate ────────────────────────────────────────────────────────
   async function generate() {
@@ -864,6 +956,18 @@
       badge.className = "badge badge-done";
       badge.textContent = "Done";
       if (url) {
+        const previewBtn = document.createElement("button");
+        previewBtn.className = "batch-row-link";
+        previewBtn.style.background = "none";
+        previewBtn.style.border = "none";
+        previewBtn.style.cursor = "pointer";
+        previewBtn.style.font = "inherit";
+        previewBtn.id = `brow-preview-btn-${index}`;
+        previewBtn.textContent = "▶";
+        previewBtn.title = `Preview ${filename}`;
+        previewBtn.addEventListener("click", () => toggleBatchRowPreview(index, url));
+        row.appendChild(previewBtn);
+
         const link = document.createElement("a");
         link.className = "batch-row-link";
         link.href = url;
@@ -871,6 +975,13 @@
         link.textContent = "↓";
         link.title = `Download ${filename}`;
         row.appendChild(link);
+
+        const audio = document.createElement("audio");
+        audio.className = "batch-row-audio";
+        audio.id = `brow-audio-${index}`;
+        audio.preload = "none";
+        audio.controls = true;
+        row.appendChild(audio);
       }
     } else if (status === "error") {
       badge.className = "badge badge-error";
@@ -1089,6 +1200,12 @@
     const actions = document.createElement("div");
     actions.className = "file-actions";
 
+    const previewBtn = document.createElement("button");
+    previewBtn.className = "btn-preview";
+    previewBtn.id = `preview-btn-${filename}`;
+    previewBtn.textContent = "▶ Preview";
+    previewBtn.addEventListener("click", () => togglePreview(filename));
+
     const dlLink = document.createElement("a");
     dlLink.className = "btn-download";
     dlLink.href = `/media/${encodeURIComponent(filename)}`;
@@ -1100,11 +1217,20 @@
     delBtn.textContent = "✕ Delete";
     delBtn.addEventListener("click", () => deleteFile(filename));
 
+    const audio = document.createElement("audio");
+    audio.className = "file-audio";
+    audio.id = `audio-${filename}`;
+    audio.preload = "none";
+    audio.controls = true;
+    audio.src = `/media/${encodeURIComponent(filename)}`;
+
+    actions.appendChild(previewBtn);
     actions.appendChild(dlLink);
     actions.appendChild(delBtn);
     item.appendChild(icon);
     item.appendChild(nameSpan);
     item.appendChild(actions);
+    item.appendChild(audio);
     list.prepend(item);
     setTimeout(() => item.classList.remove("new-file"), 2000);
   }
@@ -1137,6 +1263,12 @@
     link.textContent = `Download ${filename}`;
     bar.style.display = "flex";
     document.getElementById("error-bar").style.display = "none";
+
+    const audio = document.getElementById("success-audio");
+    audio.pause();
+    audio.src = url;
+    audio.classList.remove("visible");
+    document.getElementById("success-preview-btn").textContent = "▶ Preview";
   }
 
   function showBatchError(msg) {
@@ -1148,6 +1280,9 @@
   function clearSingleMessages() {
     document.getElementById("error-bar").style.display = "none";
     document.getElementById("success-bar").style.display = "none";
+    const audio = document.getElementById("success-audio");
+    audio.pause();
+    audio.classList.remove("visible");
   }
 
   function clearBatchMessages() {
