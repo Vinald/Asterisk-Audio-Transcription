@@ -110,11 +110,13 @@ VOICES = {
 }
 
 for _code, _speaker_ids in SUNBIRD_TTS_SPEAKERS.items():
-    _lang_name = SUNBIRD_LANGUAGE_NAMES[_code]
+    _lang_name = SUNBIRD_LANGUAGE_NAMES.get(_code, _code)
     VOICES.setdefault(_lang_name, [])
     for _speaker_id in _speaker_ids:
         VOICES[_lang_name].append({"id": f"sunbird:{_code}:{_speaker_id}", "name": f"Sunbird — {_speaker_id}"})
-VOICES = dict(sorted(VOICES.items()))
+# English first (the only language that needs no AUTH_TOKEN and no CSV setup) —
+# it's the frontend's default-selected <option> — then the rest alphabetically.
+VOICES = {"English": VOICES.pop("English"), **dict(sorted(VOICES.items()))}
 
 _KOKORO_VOICES = {v["id"] for v in VOICES["English"] if not v["id"].startswith("sunbird:")}
 _VALID_VOICES = {v["id"] for voices in VOICES.values() for v in voices}
@@ -170,7 +172,11 @@ async def lifespan(app):
         log.info("Kokoro ready")
 
     if not AUTH_TOKEN:
-        log.warning("AUTH_TOKEN not set — Sunbird voices (English/Luganda) and Sunbird STT will fail. Kokoro English and Swahili TTS work without it.")
+        log.warning(
+            "AUTH_TOKEN not set — Sunbird voices (%d speakers across %d languages) and Sunbird STT will fail. "
+            "Kokoro English and edge-tts Swahili TTS work without it.",
+            sum(len(v) for v in SUNBIRD_TTS_SPEAKERS.values()), len(SUNBIRD_TTS_SPEAKERS),
+        )
 
     # faster-whisper is loaded lazily on the first transcription request.
     app.state.whisper = None
@@ -262,7 +268,7 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
             sox_fmt = "wav"
 
         elif voice.startswith("sunbird:"):
-            # ── Sunbird AI (English / Luganda) ───────────────────────────────
+            # ── Sunbird AI (cloud, 17 languages — see SUNBIRD_TTS_SPEAKERS) ──
             if not AUTH_TOKEN:
                 raise HTTPException(status_code=503, detail="Sunbird voices require AUTH_TOKEN in .env")
             _, sunbird_lang, sunbird_speaker = voice.split(":", 2)
