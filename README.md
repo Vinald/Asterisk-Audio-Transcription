@@ -9,8 +9,7 @@ per request.
 | Language | Provider | Notes |
 |---|---|---|
 | English (12 voices) | **Kokoro TTS** | Local model — no internet, no API key |
-| English (1 voice) | **Sunbird AI** | Cloud — requires `AUTH_TOKEN` |
-| Luganda | **Sunbird AI** | Cloud — requires `AUTH_TOKEN` |
+| English (3 voices), Luganda (8), Swahili (2), + 14 more languages (Acholi, Afrikaans, Ateso, Ewe, Fulani, Hausa, Igbo, Kikuyu, Kinyarwanda, Lingala, Luo, Runyankole, Xhosa, Yoruba) | **Sunbird AI** | Cloud — requires `AUTH_TOKEN`. 48 speakers total across 17 languages |
 | Swahili (4 voices) | **edge-tts** | Microsoft neural cloud — no API key |
 
 ### Speech-to-text
@@ -59,7 +58,7 @@ local transcription backend.
 
 | Token | Enables | Where |
 |---|---|---|
-| `AUTH_TOKEN` | Sunbird TTS voices (Luganda, "Sunbird 248") **and** Sunbird STT | free account at [api.sunbird.ai](https://api.sunbird.ai) |
+| `AUTH_TOKEN` | Sunbird TTS voices (48 speakers, 17 languages) **and** Sunbird STT | free account at [api.sunbird.ai](https://api.sunbird.ai) |
 | `OPENAI_API_KEY` | OpenAI Whisper STT backend (optional) | [platform.openai.com](https://platform.openai.com) |
 
 ```bash
@@ -165,17 +164,15 @@ The transcript appears below with **Copy** and **Save .txt** buttons.
 | `bm_george` | George — GB male |
 | `bm_lewis` | Lewis — GB male |
 
-### English — Sunbird AI (cloud, requires `AUTH_TOKEN`)
+### Sunbird AI (cloud, requires `AUTH_TOKEN`)
 
-| Voice ID | Name |
-|---|---|
-| `sunbird:248` | Sunbird 248 — English female |
-
-### Luganda — Sunbird AI (cloud, requires `AUTH_TOKEN`)
-
-| Voice ID | Name |
-|---|---|
-| `sunbird:248` | Sunbird — Luganda female |
+Voice IDs follow the pattern `sunbird:<iso-639-3 code>:<speaker id>`, e.g.
+`sunbird:lug:waxal_lug_0002` (Luganda) or `sunbird:ach:salt_ach_0001` (Acholi).
+48 speakers across 17 languages — English, Luganda, Swahili, Acholi, Afrikaans,
+Ateso, Ewe, Fulani, Hausa, Igbo, Kikuyu, Kinyarwanda, Lingala, Luo, Runyankole,
+Xhosa, and Yoruba. The full, current roster is always available from
+[`GET /speakers`](#get-speakers) — it's generated from the `SUNBIRD_TTS_SPEAKERS`
+dict in `app.py`, a snapshot of Sunbird's `/tasks/voice/speakers` catalog.
 
 ### Swahili — edge-tts (cloud, no API key)
 
