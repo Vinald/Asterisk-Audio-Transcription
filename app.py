@@ -40,6 +40,47 @@ BATCH_MAX_ROWS = 500      # rows; prevents DoS via oversized CSVs
 UPLOAD_MAX_BYTES = 2 * 1024 * 1024        # 2 MB CSV limit
 AUDIO_UPLOAD_MAX_BYTES = 25 * 1024 * 1024  # 25 MB audio limit for transcription
 
+# Language display names, keyed by the ISO 639-3 / SALT code Sunbird's API uses.
+# Shared by the Sunbird TTS voice roster (below) and the Sunbird STT backend.
+SUNBIRD_LANGUAGE_NAMES = {
+    "lug": "Luganda", "eng": "English", "swa": "Swahili", "ach": "Acholi",
+    "teo": "Ateso", "lgg": "Lugbara", "nyn": "Runyankole", "cgg": "Rukiga",
+    "xog": "Lusoga", "koo": "Rukonjo", "ttj": "Rutooro", "ruc": "Ruruuli",
+    "myx": "Lumasaba", "luo": "Luo", "luy": "Luhya", "kln": "Kalenjin",
+    "kik": "Kikuyu", "lth": "Thur", "rwm": "Kwamba", "led": "Lendu",
+    "afr": "Afrikaans", "aka": "Akan", "amh": "Amharic", "bam": "Bambara",
+    "bem": "Bemba", "ber": "Berber", "nya": "Chichewa", "dga": "Dagaare",
+    "dag": "Dagbani", "ewe": "Ewe", "fra": "French", "ful": "Fulani",
+    "hau": "Hausa", "ibo": "Igbo", "kpo": "Ikposo", "kab": "Kabyle",
+    "kau": "Kanuri", "kin": "Kinyarwanda", "lin": "Lingala", "mlg": "Malagasy",
+    "nbl": "Ndebele", "pcm": "Nigerian Pidgin", "orm": "Oromo", "sna": "Shona",
+    "som": "Somali", "sot": "Sotho", "tsn": "Tswana", "wol": "Wolof",
+    "xho": "Xhosa", "yor": "Yoruba", "zul": "Zulu",
+}
+
+# Sunbird TTS speaker catalog — snapshot of GET /tasks/voice/speakers (2026-09-21).
+# Re-fetch that endpoint and update this dict if Sunbird's voice roster changes.
+SUNBIRD_TTS_SPEAKERS = {
+    "ach": ["salt_ach_0001", "waxal_ach_0001", "waxal_ach_0005", "waxal_ach_0006", "waxal_ach_0008"],
+    "afr": ["slr32_afr_0009"],
+    "eng": ["salt_eng_0001", "salt_eng_0002", "salt_eng_0003"],
+    "ewe": ["slr129_ewe_0001"],
+    "ful": ["waxal_ful_0003", "waxal_ful_0004", "waxal_ful_0006"],
+    "hau": ["waxal_hau_0004", "waxal_hau_0006", "waxal_hau_0007", "waxal_hau_0008"],
+    "ibo": ["waxal_ibo_0003", "waxal_ibo_0005", "waxal_ibo_0008"],
+    "kik": ["waxal_kik_0003", "waxal_kik_0004"],
+    "kin": ["bateesa_kin_0001"],
+    "lin": ["slr129_lin_0001"],
+    "lug": ["salt_lug_0001", "waxal_lug_0002", "waxal_lug_0003", "waxal_lug_0004",
+            "waxal_lug_0005", "waxal_lug_0006", "waxal_lug_0007", "waxal_lug_0008"],
+    "luo": ["waxal_luo_0001", "waxal_luo_0002", "waxal_luo_0003", "waxal_luo_0004"],
+    "nyn": ["salt_nyn_0001", "waxal_nyn_0003", "waxal_nyn_0004", "waxal_nyn_0007", "waxal_nyn_0008"],
+    "swa": ["waxal_swa_0006", "waxal_swa_0007"],
+    "teo": ["salt_teo_0001"],
+    "xho": ["slr32_xho_0012"],
+    "yor": ["waxal_yor_0002", "waxal_yor_0006", "waxal_yor_0008"],
+}
+
 # Voice roster — voice ID prefix determines TTS backend:
 #   af_/am_/bf_/bm_ → Kokoro TTS (English, local model)
 #   sw-*            → edge-tts (Swahili, Microsoft neural)
@@ -59,11 +100,6 @@ VOICES = {
         {"id": "bf_isabella", "name": "Isabella — GB female (Kokoro)"},
         {"id": "bm_george",   "name": "George — GB male (Kokoro)"},
         {"id": "bm_lewis",    "name": "Lewis — GB male (Kokoro)"},
-        # ── Sunbird AI (cloud) ──
-        {"id": "sunbird:eng:salt_eng_0001", "name": "Sunbird — English (Sunbird)"},
-    ],
-    "Luganda": [
-        {"id": "sunbird:lug:salt_lug_0001", "name": "Sunbird — Luganda (Sunbird)"},
     ],
     "Swahili": [
         {"id": "sw-KE-ZuriNeural",   "name": "Zuri — Swahili KE (female)"},
@@ -73,27 +109,20 @@ VOICES = {
     ],
 }
 
+for _code, _speaker_ids in SUNBIRD_TTS_SPEAKERS.items():
+    _lang_name = SUNBIRD_LANGUAGE_NAMES[_code]
+    VOICES.setdefault(_lang_name, [])
+    for _speaker_id in _speaker_ids:
+        VOICES[_lang_name].append({"id": f"sunbird:{_code}:{_speaker_id}", "name": f"Sunbird — {_speaker_id}"})
+VOICES = dict(sorted(VOICES.items()))
+
 _KOKORO_VOICES = {v["id"] for v in VOICES["English"] if not v["id"].startswith("sunbird:")}
 _VALID_VOICES = {v["id"] for voices in VOICES.values() for v in voices}
 
 
 # ── Speech-to-text ────────────────────────────────────────────────────────────
 # Sunbird STT: ISO 639-3 codes for the 51 African languages the ASR model covers.
-SUNBIRD_STT_LANGUAGES = {
-    "lug": "Luganda", "eng": "English", "swa": "Swahili", "ach": "Acholi",
-    "teo": "Ateso", "lgg": "Lugbara", "nyn": "Runyankole", "cgg": "Rukiga",
-    "xog": "Lusoga", "koo": "Rukonjo", "ttj": "Rutooro", "ruc": "Ruruuli",
-    "myx": "Lumasaba", "luo": "Luo", "luy": "Luhya", "kln": "Kalenjin",
-    "kik": "Kikuyu", "lth": "Thur", "rwm": "Kwamba", "led": "Lendu",
-    "afr": "Afrikaans", "aka": "Akan", "amh": "Amharic", "bam": "Bambara",
-    "bem": "Bemba", "ber": "Berber", "nya": "Chichewa", "dga": "Dagaare",
-    "dag": "Dagbani", "ewe": "Ewe", "fra": "French", "ful": "Fulani",
-    "hau": "Hausa", "ibo": "Igbo", "kpo": "Ikposo", "kab": "Kabyle",
-    "kau": "Kanuri", "kin": "Kinyarwanda", "lin": "Lingala", "mlg": "Malagasy",
-    "nbl": "Ndebele", "pcm": "Nigerian Pidgin", "orm": "Oromo", "sna": "Shona",
-    "som": "Somali", "sot": "Sotho", "tsn": "Tswana", "wol": "Wolof",
-    "xho": "Xhosa", "yor": "Yoruba", "zul": "Zulu",
-}
+SUNBIRD_STT_LANGUAGES = SUNBIRD_LANGUAGE_NAMES
 
 # Whisper backends (faster-whisper + OpenAI) use ISO 639-1 codes; "auto" detects.
 WHISPER_LANGUAGES = {
