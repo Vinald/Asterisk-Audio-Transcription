@@ -1,5 +1,7 @@
 # Asterisk Audio & Transcription
 
+[![Release](https://img.shields.io/github/v/release/Vinald/Asterisk-Audio-Transcription)](https://github.com/Vinald/Asterisk-Audio-Transcription/releases/latest)
+
 A web tool for **text-to-speech** (producing Asterisk-compatible mono MP3 audio from
 text) and **speech-to-text** (transcribing audio files). Every backend is selectable
 per request.
