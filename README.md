@@ -86,11 +86,39 @@ Or with uvicorn directly:
 .venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Or with Docker:
+Or with Docker (builds the image locally):
 
 ```bash
 docker compose up -d
 ```
+
+### Using the prebuilt image (no build required)
+
+Multi-arch images (`amd64`/`arm64`) are published to
+[GHCR](https://github.com/Vinald/Asterisk-Audio-Transcription/pkgs/container/asterisk-audio-transcription)
+on every release — skip the local build entirely:
+
+```bash
+mkdir -p media models
+cp .env.example .env   # edit .env and set AUTH_TOKEN / OPENAI_API_KEY as needed
+
+docker run -d --name asterisk-audio -p 8000:8000 \
+  --env-file .env \
+  -v "$(pwd)/media:/app/media" \
+  -v "$(pwd)/models:/app/models" \
+  ghcr.io/vinald/asterisk-audio-transcription:latest
+```
+
+Pin a specific version instead of `latest` (e.g.
+`ghcr.io/vinald/asterisk-audio-transcription:v1.0`) — see
+[Releases](https://github.com/Vinald/Asterisk-Audio-Transcription/releases) for
+what changed.
+
+English (Kokoro) TTS needs the model files under `models/` — either run
+`python install.py` once to fetch them (see [Installation](#installation),
+step 6), or download
+`kokoro-v1.0.int8.onnx` and `voices-v1.0.bin` into `models/` yourself. Every
+other voice and STT backend works without them.
 
 ---
 
