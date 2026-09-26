@@ -1181,6 +1181,16 @@
     if (existing) {
       existing.classList.add("new-file");
       setTimeout(() => existing.classList.remove("new-file"), 2000);
+      // Regenerated under the same filename — force a re-fetch instead of
+      // replaying whatever this <audio> element had cached/buffered before.
+      const audio = document.getElementById(`audio-${filename}`);
+      if (audio) {
+        audio.pause();
+        audio.classList.remove("visible");
+        audio.src = `/media/${encodeURIComponent(filename)}?t=${Date.now()}`;
+        const btn = document.getElementById(`preview-btn-${filename}`);
+        if (btn) btn.textContent = "▶ Preview";
+      }
       return;
     }
 

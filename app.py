@@ -231,21 +231,24 @@ async def index(request: Request):
 
 
 async def _do_generate(request: Request, text: str, filename_raw: str, language: str, voice: str, speed: float = 1.0) -> dict:
-    """Synthesise text → 8 kHz mono MP3. Returns {filename, url}."""
+    """Synthesise text → 48 kHz mono MP3. Returns {filename, url}."""
     if len(text) > TEXT_MAX_LEN:
         raise HTTPException(status_code=400, detail=f"Text too long ({len(text)} chars; limit {TEXT_MAX_LEN})")
     safe_name = filename_raw.strip().replace(" ", "-")
-    safe_name = "".join(c for c in safe_name if c.isalnum() or c in "-_")
-    if safe_name.endswith(".mp3"):
+    if safe_name.lower().endswith(".mp3"):
         safe_name = safe_name[:-4]
-    elif safe_name.endswith("mp3"):
-        safe_name = safe_name[:-3].rstrip(".")
+    safe_name = "".join(c for c in safe_name if c.isalnum() or c in "-_")
     safe_name = safe_name[:FILENAME_MAX_LEN]
     if not safe_name:
         raise HTTPException(status_code=400, detail="Invalid filename")
     safe_name += ".mp3"
 
     out_path = os.path.join(MEDIA_DIR, safe_name)
+    # Write to a temp file in the same dir and atomically rename on success, so a
+    # failed conversion or two concurrent requests for the same filename never
+    # leave a partial/corrupt file at out_path.
+    tmp_out_fd, tmp_out_path = tempfile.mkstemp(suffix=".mp3", dir=MEDIA_DIR)
+    os.close(tmp_out_fd)
     tmp_path = None
     sox_fmt = "mp3"
 
@@ -264,7 +267,8 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
                 wf.setframerate(sample_rate)
-                wf.writeframes((samples * 32767).astype(np.int16).tobytes())
+                pcm = np.clip(samples, -1.0, 1.0)
+                wf.writeframes((pcm * 32767).astype(np.int16).tobytes())
             sox_fmt = "wav"
 
         elif voice.startswith("sunbird:"):
@@ -318,7 +322,7 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
             await communicate.save(tmp_path)
 
         proc = await asyncio.create_subprocess_exec(
-            "sox", "-t", sox_fmt, tmp_path, "-r", "48000", "-c", "1", out_path,
+            "sox", "-t", sox_fmt, tmp_path, "-r", "48000", "-c", "1", tmp_out_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -328,13 +332,18 @@ async def _do_generate(request: Request, text: str, filename_raw: str, language:
             err_snippet = stderr.decode(errors="replace")[:200]
             raise HTTPException(status_code=500, detail=f"Audio conversion failed: {err_snippet}")
 
+        os.replace(tmp_out_path, out_path)
+
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"TTS request failed: {exc}")
+        # Truncate to avoid leaking internal hostnames/paths from library internals
+        raise HTTPException(status_code=502, detail=f"TTS request failed: {str(exc)[:200]}")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
+        if os.path.exists(tmp_out_path):
+            os.unlink(tmp_out_path)
 
     return {"filename": safe_name, "url": f"/media/{safe_name}"}
 
@@ -482,10 +491,10 @@ async def transcribe(
         raise HTTPException(status_code=400, detail=f"Unknown STT backend: {backend!r}")
     if not cfg["enabled"]:
         raise HTTPException(status_code=503, detail=f"Backend {backend!r} is not configured — {cfg['note']}")
-    if language not in cfg["languages"]:
-        raise HTTPException(status_code=400, detail=f"Language {language!r} is not available for {backend}")
     if backend == "sunbird" and language == "auto":
         raise HTTPException(status_code=400, detail="Sunbird STT needs an explicit language (auto-detect unavailable)")
+    if language not in cfg["languages"]:
+        raise HTTPException(status_code=400, detail=f"Language {language!r} is not available for {backend}")
 
     if audio.size is not None and audio.size > AUDIO_UPLOAD_MAX_BYTES:
         raise HTTPException(status_code=413, detail=f"Audio too large (limit {AUDIO_UPLOAD_MAX_BYTES // (1024 * 1024)} MB)")
@@ -562,7 +571,7 @@ async def transcribe(
                     "language": payload.get("language") or language,
                     "duration": payload.get("duration"),
                     "segments": [
-                        {"start": round(s["start"], 2), "end": round(s["end"], 2), "text": s["text"].strip()}
+                        {"start": s.get("start"), "end": s.get("end"), "text": (s.get("text") or "").strip()}
                         for s in segs
                     ] if timestamps else [],
                 }
@@ -571,7 +580,8 @@ async def transcribe(
         except httpx.HTTPStatusError as exc:
             raise HTTPException(status_code=502, detail=f"{backend} STT error {exc.response.status_code}: {exc.response.text[:200]}")
         except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}")
+            # Truncate to avoid leaking internal hostnames/paths from library internals
+            raise HTTPException(status_code=502, detail=f"Transcription failed: {str(exc)[:200]}")
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
