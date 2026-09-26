@@ -1,10 +1,14 @@
-name: Build and push Docker image
+name: Release
 
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to rebuild and release, e.g. v1.0"
+        required: true
 
 env:
   IMAGE: ghcr.io/vinald/asterisk-audio-transcription
@@ -15,10 +19,18 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
 
     steps:
+      - name: Resolve tag
+        id: resolve
+        run: echo "tag=${{ inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.tag }}
 
       - name: Set up QEMU (for linux/arm64)
         uses: docker/setup-qemu-action@v3
@@ -39,7 +51,7 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=ref,event=tag
+            type=raw,value=${{ steps.resolve.outputs.tag }}
             type=raw,value=latest
 
       - name: Build and push
@@ -52,3 +64,41 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Build release notes from the annotated tag
+        id: notes
+        env:
+          TAG: ${{ needs.build-and-push.outputs.tag }}
+        run: |
+          title=$(git tag -l --format='%(contents:subject)' "$TAG")
+          echo "title=$title" >> "$GITHUB_OUTPUT"
+
+          prev_tag=$(git tag --sort=-version:refname | grep -A1 -x "$TAG" | tail -n1)
+
+          {
+            git tag -l --format='%(contents:body)' "$TAG"
+            if [ -n "$prev_tag" ] && [ "$prev_tag" != "$TAG" ]; then
+              echo
+              echo "**Full changelog**: https://github.com/${{ github.repository }}/compare/${prev_tag}...${TAG}"
+            fi
+          } > release-notes.md
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build-and-push.outputs.tag }}
+          name: ${{ steps.notes.outputs.title }}
+          body_path: release-notes.md
