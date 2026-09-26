@@ -81,15 +81,30 @@ jobs:
       - name: Build release notes from the annotated tag
         id: notes
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.build-and-push.outputs.tag }}
         run: |
-          title=$(git tag -l --format='%(contents:subject)' "$TAG")
+          # actions/checkout peels annotated tags to lightweight ones in its local
+          # clone for tag-triggered workflows, so `git tag -l --format=...` reads
+          # the commit message instead of the tag's own annotation. Read the real
+          # tag object straight from the API instead.
+          obj=$(gh api "repos/${{ github.repository }}/git/refs/tags/$TAG")
+          obj_type=$(echo "$obj" | jq -r '.object.type')
+          obj_sha=$(echo "$obj" | jq -r '.object.sha')
+
+          if [ "$obj_type" = "tag" ]; then
+            msg=$(gh api "repos/${{ github.repository }}/git/tags/$obj_sha" --jq '.message')
+          else
+            msg=$(gh api "repos/${{ github.repository }}/git/commits/$obj_sha" --jq '.message')
+          fi
+
+          title=$(printf '%s\n' "$msg" | head -n1)
           echo "title=$title" >> "$GITHUB_OUTPUT"
 
           prev_tag=$(git tag --sort=-version:refname | grep -A1 -x "$TAG" | tail -n1)
 
           {
-            git tag -l --format='%(contents:body)' "$TAG"
+            printf '%s\n' "$msg" | tail -n +2 | sed '/./,$!d'
             if [ -n "$prev_tag" ] && [ "$prev_tag" != "$TAG" ]; then
               echo
               echo "**Full changelog**: https://github.com/${{ github.repository }}/compare/${prev_tag}...${TAG}"
